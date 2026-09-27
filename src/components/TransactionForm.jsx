@@ -3,38 +3,43 @@ import { useTransactions, CATEGORIES, PAYMENT_METHODS, INCOME_SOURCES } from '..
 import { X } from 'lucide-react';
 import { format } from 'date-fns';
 
-const TransactionForm = ({ onClose }) => {
-  const { addTransaction, currentMonth } = useTransactions();
+const TransactionForm = ({ onClose, initialData }) => {
+  const { addTransaction, editTransaction, currentMonth } = useTransactions();
   
-  const initialDate = format(new Date(), 'yyyy-MM-dd').startsWith(currentMonth) 
+  const defaultDate = format(new Date(), 'yyyy-MM-dd').startsWith(currentMonth) 
     ? format(new Date(), 'yyyy-MM-dd') 
     : `${currentMonth}-01`;
 
-  const [type, setType] = useState('expense');
-  const [description, setDescription] = useState('');
-  const [amount, setAmount] = useState('');
-  const [date, setDate] = useState(initialDate);
-  const [category, setCategory] = useState(CATEGORIES[0].name);
-  const [paymentMethod, setPaymentMethod] = useState(PAYMENT_METHODS[0]);
-  const [source, setSource] = useState(INCOME_SOURCES[0]);
+  const [type, setType] = useState(initialData?.type || 'expense');
+  const [description, setDescription] = useState(initialData?.description || '');
+  const [amount, setAmount] = useState(initialData?.amount || '');
+  const [date, setDate] = useState(initialData?.date || defaultDate);
+  const [category, setCategory] = useState(initialData?.category || CATEGORIES[0].name);
+  const [paymentMethod, setPaymentMethod] = useState(initialData?.paymentMethod || PAYMENT_METHODS[0]);
+  const [source, setSource] = useState(initialData?.source || INCOME_SOURCES[0]);
   const [installments, setInstallments] = useState(1);
-  const [details, setDetails] = useState(''); // Novo campo
-  const [attachment, setAttachment] = useState(null); // Arquivo anexo
+  const [details, setDetails] = useState(initialData?.details || '');
+  const [attachment, setAttachment] = useState(null);
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!description || !amount || !date) return;
 
-    addTransaction({
+    const data = {
       type,
       description,
       amount,
       date,
       details,
       attachment,
-      installments,
       ...(type === 'expense' ? { category, paymentMethod } : { source })
-    });
+    };
+
+    if (initialData) {
+      editTransaction(initialData.id, data);
+    } else {
+      addTransaction({ ...data, installments });
+    }
 
     onClose();
   };
@@ -188,7 +193,7 @@ const TransactionForm = ({ onClose }) => {
                 </div>
               </div>
               
-              {isCreditCard && (
+              {isCreditCard && !initialData && (
                 <div className="form-group">
                   <label className="form-label">Parcelas (Valor total será dividido)</label>
                   <input

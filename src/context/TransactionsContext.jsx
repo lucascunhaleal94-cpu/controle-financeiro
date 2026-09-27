@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { format, parseISO, addMonths, isBefore } from 'date-fns';
+import { format, parseISO, addMonths, subMonths, isBefore } from 'date-fns';
 import { set, del, get } from 'idb-keyval';
 
 const TransactionsContext = createContext();
@@ -42,6 +42,7 @@ export const TransactionsProvider = ({ children }) => {
   const [settings, setSettings] = useState(() => {
     const defaultSettings = {
       appStartDate: format(new Date(), 'yyyy-MM'),
+      initialBalance: 0,
       fixedIncomes: { LUCAS: 15600, GABRIELA: 0 },
       fixedExpenses: [], 
       fixedExpensesOverrides: {}, 
@@ -131,6 +132,12 @@ export const TransactionsProvider = ({ children }) => {
   const removeFixedExpense = (id) => {
     updateSettings({
       fixedExpenses: (settings.fixedExpenses || []).filter(e => e.id !== id)
+    });
+  };
+
+  const editFixedExpense = (id, updatedExpense) => {
+    updateSettings({
+      fixedExpenses: (settings.fixedExpenses || []).map(e => e.id === id ? { ...e, ...updatedExpense } : e)
     });
   };
 
@@ -238,6 +245,19 @@ export const TransactionsProvider = ({ children }) => {
     }
   };
 
+  const editTransaction = (id, updatedData) => {
+    setTransactions((prev) => prev.map(t => {
+      if (t.id === id) {
+        return {
+          ...t,
+          ...updatedData,
+          amount: parseFloat(updatedData.amount) || t.amount
+        };
+      }
+      return t;
+    }));
+  };
+
   const openAttachment = async (attachmentKey) => {
     try {
       const data = await get(attachmentKey);
@@ -255,7 +275,7 @@ export const TransactionsProvider = ({ children }) => {
 
   const generateVirtualTransactions = () => {
     const virtuals = [];
-    let mDate = parseISO(`${settings.appStartDate || '2026-09'}-01`);
+    let mDate = subMonths(parseISO(`${settings.appStartDate || '2026-09'}-01`), 1);
     const endObj = addMonths(parseISO(`${currentMonth}-01`), 1);
 
     while (!isBefore(endObj, mDate)) {
@@ -341,10 +361,10 @@ export const TransactionsProvider = ({ children }) => {
   const monthNet = totalIncome - totalExpense;
 
   const calculateAccumulatedBalance = () => {
-    let accBalance = 0;
+    let accBalance = parseFloat(settings.initialBalance || 0);
     allTransactions.forEach(t => {
       const effMonth = getEffectiveMonth(t);
-      if (effMonth < currentMonth) {
+      if (effMonth < currentMonth && effMonth >= settings.appStartDate) {
         if (t.type === 'income') accBalance += t.amount;
         if (t.type === 'expense' && t.category !== 'DÍVIDA DE TERCEIROS') accBalance -= t.amount;
       }
@@ -381,6 +401,273 @@ export const TransactionsProvider = ({ children }) => {
     return { source, received };
   });
 
+  useEffect(() => {
+    const imported = localStorage.getItem('@ControleFinanceiro:importedOct2026');
+    if (!imported) {
+      const items = [
+        { desc: "VIAGEM 30 ANOS", cat: "LAZER", parcels: 4, val: 1303.58 },
+        { desc: "ADAPTA (ACQUARELA)", cat: "DÍVIDA DE TERCEIROS", parcels: 4, val: 99.00 },
+        { desc: "ÔMEGA GABRIELA", cat: "SAÚDE", parcels: 3, val: 112.00 },
+        { desc: "CLUBE SMILES (ANA PAULA)", cat: "DÍVIDA DE TERCEIROS", parcels: 10, val: 77.90 },
+        { desc: "COISAS DE CASA", cat: "CASA", parcels: 2, val: 211.80 },
+        { desc: "WHEY PROTEIN", cat: "SAÚDE", parcels: 1, val: 209.94 },
+        { desc: "PRESENTES CLAUDIA, ANA PAULA E PRI", cat: "PRESENTE", parcels: 1, val: 239.98 },
+        { desc: "CAMISAS LUCAS", cat: "DÍVIDA DE TERCEIROS", parcels: 3, val: 74.40 },
+        { desc: "LUZES GABRIELA", cat: "PRESENTE", parcels: 1, val: 469.00 },
+        { desc: "REMÉDIO LAIKA", cat: "DÍVIDA DE TERCEIROS", parcels: 1, val: 124.00 },
+        { desc: "OBRA (ACQUARELA)", cat: "DÍVIDA DE TERCEIROS", parcels: 1, val: 523.30 },
+        { desc: "PASSAGENS (VICTOR)", cat: "DÍVIDA DE TERCEIROS", parcels: 3, val: 1025.44 },
+        { desc: "PRESENTE LÚCIO (ANA PAULA)", cat: "DÍVIDA DE TERCEIROS", parcels: 1, val: 63.00 },
+        { desc: "PRESENTE LUCAS", cat: "PRESENTE", parcels: 1, val: 79.90 },
+        { desc: "PRESENTE DA ANA PAULA", cat: "PRESENTE", parcels: 1, val: 80.00 },
+        { desc: "POTE DE MELANCIA", cat: "CASA", parcels: 1, val: 135.99 }
+      ];
+
+      const baseDate = "2026-09-15"; // Fatura fecha em 1, então 15/09 vai para fatura de Outubro
+      const newTx = [];
+      
+      items.forEach(item => {
+        const groupId = item.parcels > 1 ? uuidv4() : null;
+        for (let i = 0; i < item.parcels; i++) {
+          newTx.push({
+            id: uuidv4(),
+            groupId,
+            type: 'expense',
+            description: item.parcels > 1 ? `${item.desc} (${i + 1}/${item.parcels})` : item.desc,
+            amount: item.val,
+            originalDate: baseDate,
+            date: baseDate,
+            details: 'Importado de Out/2026',
+            hasAttachment: false,
+            attachmentKey: null,
+            category: item.cat,
+            paymentMethod: 'CARTÃO SANTANDER',
+            source: null,
+            installmentsTotal: item.parcels,
+            currentInstallment: i + 1
+          });
+        }
+      });
+
+      setTransactions(prev => [...prev, ...newTx]);
+      localStorage.setItem('@ControleFinanceiro:importedOct2026', 'true');
+    }
+  }, []);
+
+  useEffect(() => {
+    const importedPart2 = localStorage.getItem('@ControleFinanceiro:importedOct2026_part2');
+    if (!importedPart2) {
+      const items = [
+        { desc: "CADERNO INTELIGENTE", cat: "EDUCAÇÃO", pay: "CARTÃO SANTANDER", parcels: 1, val: 88.79 },
+        { desc: "PRESENTE MARINA E RAMON", cat: "PRESENTE", pay: "CARTÃO SANTANDER", parcels: 1, val: 75.75 },
+        { desc: "PRESENTE LARISSA", cat: "PRESENTE", pay: "CARTÃO XP", parcels: 1, val: 80.96 },
+        { desc: "CALÇAS DO PAULO", cat: "PRESENTE", pay: "CARTÃO XP", parcels: 1, val: 84.95 },
+        { desc: "CALÇAS DO PAULO (PRI)", cat: "DÍVIDA DE TERCEIROS", pay: "CARTÃO XP", parcels: 1, val: 84.95 },
+        { desc: "MONJOURO (LUCIO)", cat: "DÍVIDA DE TERCEIROS", pay: "CARTÃO SANTANDER", parcels: 2, val: 593.18 },
+        { desc: "PAINEL SOLAR (ACQUARELA)", cat: "DÍVIDA DE TERCEIROS", pay: "CARTÃO SANTANDER", parcels: 1, val: 13192.00 },
+        { desc: "REMÉDIOS LUCAS", cat: "SAÚDE", pay: "CARTÃO SANTANDER", parcels: 1, val: 97.50 },
+        { desc: "SEM PARAR (ACQUARELA)", cat: "DÍVIDA DE TERCEIROS", pay: "CARTÃO SANTANDER", parcels: 1, val: 200.00 },
+        { desc: "MERCADO LIVRE (ACQUARELA)", cat: "DÍVIDA DE TERCEIROS", pay: "CARTÃO SANTANDER", parcels: 1, val: 104.98 },
+        { desc: "SEM PARAR (ACQUARELA)", cat: "DÍVIDA DE TERCEIROS", pay: "CARTÃO SANTANDER", parcels: 1, val: 200.00 },
+        { desc: "UBER", cat: "CARRO", pay: "CARTÃO SANTANDER", parcels: 1, val: 16.81 },
+        { desc: "BH SUPERMERCADO", cat: "MERCADO", pay: "CARTÃO SANTANDER", parcels: 1, val: 156.43 },
+        { desc: "REMÉDIO GABI", cat: "SAÚDE", pay: "CARTÃO SANTANDER", parcels: 1, val: 159.44 },
+        { desc: "UBER", cat: "CARRO", pay: "CARTÃO SANTANDER", parcels: 1, val: 15.21 },
+        { desc: "GASOLINA C4", cat: "CARRO", pay: "CARTÃO SANTANDER", parcels: 1, val: 258.22 }
+      ];
+
+      const baseDate = "2026-09-15"; // Fatura fecha em 1, então 15/09 vai para fatura de Outubro
+      const newTx = [];
+      
+      items.forEach(item => {
+        const groupId = item.parcels > 1 ? uuidv4() : null;
+        for (let i = 0; i < item.parcels; i++) {
+          newTx.push({
+            id: uuidv4(),
+            groupId,
+            type: 'expense',
+            description: item.parcels > 1 ? `${item.desc} (${i + 1}/${item.parcels})` : item.desc,
+            amount: item.val,
+            originalDate: baseDate,
+            date: baseDate,
+            details: 'Importado de Out/2026 (Parte 2)',
+            hasAttachment: false,
+            attachmentKey: null,
+            category: item.cat,
+            paymentMethod: item.pay,
+            source: null,
+            installmentsTotal: item.parcels,
+            currentInstallment: i + 1
+          });
+        }
+      });
+
+      setTransactions(prev => [...prev, ...newTx]);
+      localStorage.setItem('@ControleFinanceiro:importedOct2026_part2', 'true');
+    }
+  }, []);
+
+  useEffect(() => {
+    const importedPart3 = localStorage.getItem('@ControleFinanceiro:importedOct2026_part3');
+    if (!importedPart3) {
+      const items = [
+        { desc: "WHEY + SUPER COFFE + OMEGA", cat: "SAÚDE", pay: "CARTÃO SANTANDER", parcels: 3, val: 470.62 },
+        { desc: "FONE GABI", cat: "MESADA GABRIELA", pay: "CARTÃO SANTANDER", parcels: 1, val: 63.00 },
+        { desc: "QUADRO GABI", cat: "EDUCAÇÃO", pay: "CARTÃO SANTANDER", parcels: 1, val: 74.50 },
+        { desc: "SR A GRANEL", cat: "MERCADO", pay: "CARTÃO SANTANDER", parcels: 1, val: 44.35 },
+        { desc: "RELICÁRIO", cat: "MESADA GABRIELA", pay: "CARTÃO SANTANDER", parcels: 1, val: 26.00 },
+        { desc: "RAÇÃO MADALENA", cat: "CACHORROS", pay: "CARTÃO SANTANDER", parcels: 1, val: 67.90 },
+        { desc: "GASOLINA C4", cat: "CARRO", pay: "CARTÃO SANTANDER", parcels: 1, val: 50.00 },
+        { desc: "BH SUPERMERCADO", cat: "MERCADO", pay: "CARTÃO SANTANDER", parcels: 1, val: 1405.54 },
+        { desc: "PASTAS GABI", cat: "EDUCAÇÃO", pay: "CARTÃO SANTANDER", parcels: 1, val: 33.48 },
+        { desc: "TECLADO + CANETA + MESA", cat: "EDUCAÇÃO", pay: "CARTÃO SANTANDER", parcels: 2, val: 299.69 },
+        { desc: "ALMOÇO GABI E ANA PAULA", cat: "LAZER", pay: "CARTÃO SANTANDER", parcels: 1, val: 143.53 },
+        { desc: "FESTA ALEMÃ", cat: "LAZER", pay: "CARTÃO SANTANDER", parcels: 1, val: 112.00 },
+        { desc: "TIA NILZA (ACQUARELA)", cat: "DÍVIDA DE TERCEIROS", pay: "CARTÃO SANTANDER", parcels: 1, val: 148.00 },
+        { desc: "CASARÃO", cat: "LAZER", pay: "CARTÃO SANTANDER", parcels: 1, val: 71.06 },
+        { desc: "ASSAÍ", cat: "MERCADO", pay: "CARTÃO SANTANDER", parcels: 1, val: 183.64 },
+        { desc: "IRMÃOS PEROBELI (ACQUARELA)", cat: "DÍVIDA DE TERCEIROS", pay: "CARTÃO SANTANDER", parcels: 1, val: 47.00 }
+      ];
+
+      const baseDate = "2026-09-15"; // Fatura fecha em 1, então 15/09 vai para fatura de Outubro
+      const newTx = [];
+      
+      items.forEach(item => {
+        const groupId = item.parcels > 1 ? uuidv4() : null;
+        for (let i = 0; i < item.parcels; i++) {
+          newTx.push({
+            id: uuidv4(),
+            groupId,
+            type: 'expense',
+            description: item.parcels > 1 ? `${item.desc} (${i + 1}/${item.parcels})` : item.desc,
+            amount: item.val,
+            originalDate: baseDate,
+            date: baseDate,
+            details: 'Importado de Out/2026 (Parte 3)',
+            hasAttachment: false,
+            attachmentKey: null,
+            category: item.cat,
+            paymentMethod: item.pay,
+            source: null,
+            installmentsTotal: item.parcels,
+            currentInstallment: i + 1
+          });
+        }
+      });
+
+      setTransactions(prev => [...prev, ...newTx]);
+      localStorage.setItem('@ControleFinanceiro:importedOct2026_part3', 'true');
+    }
+  }, []);
+
+  useEffect(() => {
+    const importedPart4 = localStorage.getItem('@ControleFinanceiro:importedOct2026_part4');
+    if (!importedPart4) {
+      const items = [
+        { desc: "HL PNEUS (ACQUARELA)", cat: "DÍVIDA DE TERCEIROS", pay: "CARTÃO SANTANDER", parcels: 6, val: 354.70 },
+        { desc: "FARMÁCIA", cat: "SAÚDE", pay: "CARTÃO SANTANDER", parcels: 1, val: 15.48 },
+        { desc: "LANCHE GABRIELA", cat: "MERCADO", pay: "CARTÃO SANTANDER", parcels: 1, val: 26.00 },
+        { desc: "*JIM.COM MAURICEA*", cat: "OUTROS", pay: "CARTÃO SANTANDER", parcels: 1, val: 78.90 },
+        { desc: "ASSAÍ", cat: "MERCADO", pay: "CARTÃO SANTANDER", parcels: 1, val: 64.58 },
+        { desc: "LANCHE GABRIELA", cat: "MERCADO", pay: "CARTÃO SANTANDER", parcels: 1, val: 22.90 },
+        { desc: "MEU ASSESSOR (ACQUARELA)", cat: "DÍVIDA DE TERCEIROS", pay: "CARTÃO SANTANDER", parcels: 12, val: 20.93 },
+        { desc: "SHOPEE (ACQUARELA)", cat: "DÍVIDA DE TERCEIROS", pay: "CARTÃO SANTANDER", parcels: 1, val: 11.56 },
+        { desc: "ENGATE RÁPIDO (ACQUARELA)", cat: "DÍVIDA DE TERCEIROS", pay: "CARTÃO SANTANDER", parcels: 3, val: 31.94 },
+        { desc: "COPO STANLEY GABI", cat: "PRESENTE", pay: "CARTÃO SANTANDER", parcels: 1, val: 101.45 },
+        { desc: "SHEIN (PRESENTE GABI DE 3 ANOS)", cat: "PRESENTE", pay: "CARTÃO SANTANDER", parcels: 1, val: 363.35 },
+        { desc: "ROUPAS DO FUBÁ", cat: "CACHORROS", pay: "CARTÃO SANTANDER", parcels: 2, val: 81.25 },
+        { desc: "SEM PARAR (ACQUARELA)", cat: "DÍVIDA DE TERCEIROS", pay: "CARTÃO SANTANDER", parcels: 1, val: 200.00 },
+        { desc: "UBER GABI", cat: "CARRO", pay: "CARTÃO SANTANDER", parcels: 1, val: 28.91 },
+        { desc: "ÓLEOS DO CAMINHÃO (ACQUARELA)", cat: "DÍVIDA DE TERCEIROS", pay: "CARTÃO SANTANDER", parcels: 4, val: 95.97 },
+        { desc: "PALESTRA GABI", cat: "EDUCAÇÃO", pay: "CARTÃO SANTANDER", parcels: 1, val: 55.00 }
+      ];
+
+      const baseDate = "2026-09-15"; // Fatura fecha em 1, então 15/09 vai para fatura de Outubro
+      const newTx = [];
+      
+      items.forEach(item => {
+        const groupId = item.parcels > 1 ? uuidv4() : null;
+        for (let i = 0; i < item.parcels; i++) {
+          newTx.push({
+            id: uuidv4(),
+            groupId,
+            type: 'expense',
+            description: item.parcels > 1 ? `${item.desc} (${i + 1}/${item.parcels})` : item.desc,
+            amount: item.val,
+            originalDate: baseDate,
+            date: baseDate,
+            details: 'Importado de Out/2026 (Parte 4)',
+            hasAttachment: false,
+            attachmentKey: null,
+            category: item.cat,
+            paymentMethod: item.pay,
+            source: null,
+            installmentsTotal: item.parcels,
+            currentInstallment: i + 1
+          });
+        }
+      });
+
+      setTransactions(prev => [...prev, ...newTx]);
+      localStorage.setItem('@ControleFinanceiro:importedOct2026_part4', 'true');
+    }
+  }, []);
+
+  useEffect(() => {
+    const importedPart5 = localStorage.getItem('@ControleFinanceiro:importedOct2026_part5');
+    if (!importedPart5) {
+      const items = [
+        { desc: "REGISTROS DOS CONTAINERS (ACQUARELA)", cat: "DÍVIDA DE TERCEIROS", pay: "CARTÃO SANTANDER", parcels: 2, val: 70.00 },
+        { desc: "SEM PARAR (ACQUARELA)", cat: "DÍVIDA DE TERCEIROS", pay: "CARTÃO SANTANDER", parcels: 1, val: 200.00 },
+        { desc: "FRETE ZÉ DELIVERY", cat: "LAZER", pay: "CARTÃO SANTANDER", parcels: 1, val: 7.99 },
+        { desc: "ANTENA TV (ACQUARELA)", cat: "DÍVIDA DE TERCEIROS", pay: "CARTÃO SANTANDER", parcels: 1, val: 22.90 },
+        { desc: "UBER GABI", cat: "CARRO", pay: "CARTÃO SANTANDER", parcels: 1, val: 32.86 },
+        { desc: "LÂMPADA CAMINHÃO (ACQUARELA)", cat: "DÍVIDA DE TERCEIROS", pay: "CARTÃO SANTANDER", parcels: 1, val: 16.00 },
+        { desc: "ROLAMENTOS CAMINHÃO (ACQUARELA)", cat: "DÍVIDA DE TERCEIROS", pay: "CARTÃO SANTANDER", parcels: 1, val: 189.99 }
+      ];
+
+      const baseDate = "2026-09-15"; // Fatura fecha em 1, então 15/09 vai para fatura de Outubro
+      const newTx = [];
+      
+      items.forEach(item => {
+        const groupId = item.parcels > 1 ? uuidv4() : null;
+        for (let i = 0; i < item.parcels; i++) {
+          newTx.push({
+            id: uuidv4(),
+            groupId,
+            type: 'expense',
+            description: item.parcels > 1 ? `${item.desc} (${i + 1}/${item.parcels})` : item.desc,
+            amount: item.val,
+            originalDate: baseDate,
+            date: baseDate,
+            details: 'Importado de Out/2026 (Parte 5)',
+            hasAttachment: false,
+            attachmentKey: null,
+            category: item.cat,
+            paymentMethod: item.pay,
+            source: null,
+            installmentsTotal: item.parcels,
+            currentInstallment: i + 1
+          });
+        }
+      });
+
+      setTransactions(prev => [...prev, ...newTx]);
+      localStorage.setItem('@ControleFinanceiro:importedOct2026_part5', 'true');
+    }
+  }, []);
+
+  useEffect(() => {
+    const adjustedInitialBalance = localStorage.getItem('@ControleFinanceiro:adjustedInitialBalance_Oct');
+    if (!adjustedInitialBalance) {
+      updateSettings({
+        appStartDate: '2026-10',
+        initialBalance: -3886.71
+      });
+      localStorage.setItem('@ControleFinanceiro:adjustedInitialBalance_Oct', 'true');
+    }
+  }, []);
+
   return (
     <TransactionsContext.Provider
       value={{
@@ -391,6 +678,7 @@ export const TransactionsProvider = ({ children }) => {
         setCurrentMonth,
         addTransaction,
         deleteTransaction,
+        editTransaction,
         totalIncome,
         totalExpense,
         thirdPartyDebtTotal,
@@ -404,6 +692,7 @@ export const TransactionsProvider = ({ children }) => {
         updateSettings,
         addFixedExpense,
         removeFixedExpense,
+        editFixedExpense,
         updateFixedExpenseOverride,
         paidItems,
         togglePaidStatus,

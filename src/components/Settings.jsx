@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useTransactions, PAYMENT_METHODS, CATEGORIES } from '../context/TransactionsContext';
-import { Settings as SettingsIcon, Trash2, PlusCircle, CreditCard } from 'lucide-react';
+import { Settings as SettingsIcon, Trash2, PlusCircle, CreditCard, Edit2, Save } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -9,13 +9,14 @@ const formatCurrency = (value) => {
 };
 
 const Settings = () => {
-  const { settings, updateSettings, currentMonth, addFixedExpense, removeFixedExpense } = useTransactions();
+  const { settings, updateSettings, currentMonth, addFixedExpense, removeFixedExpense, editFixedExpense } = useTransactions();
   
   const [desc, setDesc] = useState('');
   const [amt, setAmt] = useState('');
   const [due, setDue] = useState('');
   const [cat, setCat] = useState(CATEGORIES[0].name);
   const [pay, setPay] = useState(PAYMENT_METHODS[0]);
+  const [editingFixedExpenseId, setEditingFixedExpenseId] = useState(null);
 
   const handleFixedIncomeChange = (source, value) => {
     updateSettings({
@@ -58,16 +59,28 @@ const Settings = () => {
     });
   };
 
-  const handleAddFixedExpense = (e) => {
+  const handleAddOrEditFixedExpense = (e) => {
     e.preventDefault();
     if (!desc || !amt || !due) return;
-    addFixedExpense({
-      description: desc,
-      amount: parseFloat(amt),
-      dueDate: parseInt(due),
-      category: cat,
-      paymentMethod: pay
-    });
+    
+    if (editingFixedExpenseId) {
+      editFixedExpense(editingFixedExpenseId, {
+        description: desc,
+        amount: parseFloat(amt),
+        dueDate: parseInt(due),
+        category: cat,
+        paymentMethod: pay
+      });
+      setEditingFixedExpenseId(null);
+    } else {
+      addFixedExpense({
+        description: desc,
+        amount: parseFloat(amt),
+        dueDate: parseInt(due),
+        category: cat,
+        paymentMethod: pay
+      });
+    }
     setDesc(''); setAmt(''); setDue('');
   };
 
@@ -105,10 +118,28 @@ const Settings = () => {
 
       <div className="card">
         <div className="flex items-center gap-2 mb-6">
+          <SettingsIcon size={24} className="text-warning" />
+          <h2>Saldo Inicial Acumulado (Anterior ao App)</h2>
+        </div>
+        <div className="form-group" style={{ maxWidth: '250px' }}>
+          <label className="form-label">Valor (R$)</label>
+          <input
+            type="number" step="0.01" className="form-control"
+            value={settings.initialBalance || 0}
+            onChange={(e) => updateSettings({ initialBalance: parseFloat(e.target.value) || 0 })}
+          />
+          <p className="text-muted" style={{ fontSize: '0.8rem', marginTop: '0.5rem' }}>
+            Usado como ponto de partida antes do mês inicial do sistema ({settings.appStartDate}).
+          </p>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="flex items-center gap-2 mb-6">
           <SettingsIcon size={24} className="text-expense" />
           <h2>Despesas Fixas Recorrentes</h2>
         </div>
-        <form onSubmit={handleAddFixedExpense} style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginBottom: '2rem', alignItems: 'flex-end', background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '8px' }}>
+        <form onSubmit={handleAddOrEditFixedExpense} style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginBottom: '2rem', alignItems: 'flex-end', background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '8px' }}>
           <div className="form-group" style={{ flex: '1 1 200px', marginBottom: 0 }}>
             <label className="form-label">Descrição</label>
             <input type="text" className="form-control" placeholder="Ex: Luz" value={desc} onChange={e => setDesc(e.target.value)} required />
@@ -140,9 +171,19 @@ const Settings = () => {
               {PAYMENT_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
             </select>
           </div>
-          <button type="submit" className="btn btn-outline" style={{ height: '42px', color: 'var(--expense-color)', borderColor: 'var(--expense-color)' }}>
-            <PlusCircle size={18} /> Add
-          </button>
+          <div style={{ display: 'flex', gap: '0.5rem', flex: '1 1 100px', marginBottom: 0 }}>
+            <button type="submit" className="btn btn-outline" style={{ height: '42px', flex: 1, color: 'var(--expense-color)', borderColor: 'var(--expense-color)' }}>
+              {editingFixedExpenseId ? <><Save size={18} /> Salvar</> : <><PlusCircle size={18} /> Add</>}
+            </button>
+            {editingFixedExpenseId && (
+              <button type="button" className="btn btn-outline" style={{ height: '42px', flex: 1, color: 'var(--text-muted)', borderColor: 'var(--text-muted)' }} onClick={() => {
+                setEditingFixedExpenseId(null);
+                setDesc(''); setAmt(''); setDue('');
+              }}>
+                Cancelar
+              </button>
+            )}
+          </div>
         </form>
 
         {fixedExpensesList.length > 0 && (
@@ -157,6 +198,17 @@ const Settings = () => {
                 </div>
                 <div className="flex items-center gap-4">
                   <span style={{ fontWeight: '600' }}>{formatCurrency(fe.amount)}</span>
+                  <button onClick={() => {
+                    setEditingFixedExpenseId(fe.id);
+                    setDesc(fe.description);
+                    setAmt(String(fe.amount));
+                    setDue(String(fe.dueDate));
+                    setCat(fe.category);
+                    setPay(fe.paymentMethod);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
+                    <Edit2 size={18} />
+                  </button>
                   <button onClick={() => removeFixedExpense(fe.id)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
                     <Trash2 size={18} />
                   </button>

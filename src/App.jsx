@@ -31,6 +31,18 @@ function App() {
     return format(date, 'MMMM yyyy', { locale: ptBR }).toUpperCase();
   };
 
+  const [editingData, setEditingData] = useState(null);
+
+  const handleEdit = (transaction) => {
+    setEditingData(transaction);
+    setIsFormOpen(true);
+  };
+
+  const handleCloseForm = () => {
+    setEditingData(null);
+    setIsFormOpen(false);
+  };
+
   return (
     <div className="container">
       {/* Header & Navigation */}
@@ -80,7 +92,7 @@ function App() {
           Configurações
         </button>
         <div style={{ flex: 1 }}></div>
-        <button className="btn btn-primary" onClick={() => setIsFormOpen(true)} style={{ backgroundColor: 'var(--income-color)' }}>
+        <button className="btn btn-primary" onClick={() => { setEditingData(null); setIsFormOpen(true); }} style={{ backgroundColor: 'var(--income-color)' }}>
           <PlusCircle size={18} />
           Nova Transação
         </button>
@@ -89,13 +101,13 @@ function App() {
       {/* Main Content */}
       <main>
         {activeTab === 'dashboard' && <Dashboard />}
-        {activeTab === 'list' && <TransactionList />}
+        {activeTab === 'list' && <TransactionList onEdit={handleEdit} />}
         {activeTab === 'settings' && <Settings />}
       </main>
 
       {/* Modal / Form */}
       {isFormOpen && (
-        <TransactionForm onClose={() => setIsFormOpen(false)} />
+        <TransactionForm onClose={handleCloseForm} initialData={editingData} />
       )}
     </div>
   );
