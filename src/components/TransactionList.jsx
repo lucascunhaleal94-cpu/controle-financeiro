@@ -275,24 +275,17 @@ const TransactionList = ({ onEdit }) => {
                   </td>
                   <td style={{ padding: '1rem', textAlign: 'right' }}>
                     <div className="flex justify-end gap-2">
-                      {t.isFixedExpense && (
-                        <button 
-                          onClick={() => handleEditOverride(t)}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
-                          title="Editar valor neste mês"
-                        >
-                          <Edit2 size={18} />
-                        </button>
-                      )}
-                      {!t.isFixed && !t.isFixedExpense && (
-                        <>
+                      {(t.isFixedExpense || (!t.isFixed && !t.isFixedExpense)) && (
                           <button 
                             onClick={() => onEdit(t)}
                             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
-                            title="Editar"
+                            title={t.isFixedExpense ? "Editar neste mês" : "Editar"}
                           >
                             <Edit2 size={18} />
                           </button>
+                      )}
+                      {!t.isFixed && !t.isFixedExpense && (
+                        <>
                           <button 
                             onClick={() => {
                               if(t.groupId) {
