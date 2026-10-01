@@ -20,7 +20,7 @@ export const CATEGORIES = [
   { name: 'DÍVIDA DE TERCEIROS', limit: 0 }
 ];
 
-export const PAYMENT_METHODS = [
+const DEFAULT_PAYMENT_METHODS = [
   'DINHEIRO/PIX',
   'CARTÃO SANTANDER',
   'CARTÃO NUBANK',
@@ -91,11 +91,116 @@ export const TransactionsProvider = ({ children }) => {
     return {};
   });
 
+  const [categories, setCategories] = useState(() => {
+    const saved = localStorage.getItem('@ControleFinanceiro:categories');
+    if (saved) return JSON.parse(saved);
+    return CATEGORIES;
+  });
+
   const [currentMonth, setCurrentMonth] = useState(format(new Date(), 'yyyy-MM'));
+
+  const [paymentMethods, setPaymentMethods] = useState(() => {
+    const saved = localStorage.getItem('@ControleFinanceiro:paymentMethods');
+    if (saved) return JSON.parse(saved);
+    return DEFAULT_PAYMENT_METHODS;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('@ControleFinanceiro:paymentMethods', JSON.stringify(paymentMethods));
+  }, [paymentMethods]);
+
+  const addPaymentMethod = (method) => {
+    setPaymentMethods(prev => [...prev, method.toUpperCase()]);
+  };
+
+  const updatePaymentMethod = (oldName, newName) => {
+    const formattedNewName = newName.toUpperCase();
+    setPaymentMethods(prev => prev.map(m => m === oldName ? formattedNewName : m));
+    
+    setTransactions(prev => prev.map(t => t.paymentMethod === oldName ? { ...t, paymentMethod: formattedNewName } : t));
+    
+    setSettings(prev => {
+       let newSettings = JSON.parse(JSON.stringify(prev));
+       
+       if (newSettings.closingDays?.default?.[oldName]) {
+         newSettings.closingDays.default[formattedNewName] = newSettings.closingDays.default[oldName];
+         delete newSettings.closingDays.default[oldName];
+       }
+       if (newSettings.closingDays?.overrides) {
+         Object.keys(newSettings.closingDays.overrides).forEach(month => {
+           if (newSettings.closingDays.overrides[month]?.[oldName]) {
+             newSettings.closingDays.overrides[month][formattedNewName] = newSettings.closingDays.overrides[month][oldName];
+             delete newSettings.closingDays.overrides[month][oldName];
+           }
+         });
+       }
+
+       if (newSettings.dueDays?.default?.[oldName]) {
+         newSettings.dueDays.default[formattedNewName] = newSettings.dueDays.default[oldName];
+         delete newSettings.dueDays.default[oldName];
+       }
+       if (newSettings.dueDays?.overrides) {
+         Object.keys(newSettings.dueDays.overrides).forEach(month => {
+           if (newSettings.dueDays.overrides[month]?.[oldName]) {
+             newSettings.dueDays.overrides[month][formattedNewName] = newSettings.dueDays.overrides[month][oldName];
+             delete newSettings.dueDays.overrides[month][oldName];
+           }
+         });
+       }
+
+       if (newSettings.fixedExpenses) {
+         newSettings.fixedExpenses = newSettings.fixedExpenses.map(fe => 
+           fe.paymentMethod === oldName ? { ...fe, paymentMethod: formattedNewName } : fe
+         );
+       }
+       
+       return newSettings;
+    });
+  };
+
+  const deletePaymentMethod = (method, action = 'migrate', targetMethod = null) => {
+    if (action === 'delete') {
+      setTransactions(prev => prev.filter(t => t.paymentMethod !== method));
+      setSettings(prev => ({
+        ...prev,
+        fixedExpenses: (prev.fixedExpenses || []).filter(fe => fe.paymentMethod !== method)
+      }));
+    } else if (action === 'migrate' && targetMethod) {
+      setTransactions(prev => prev.map(t => t.paymentMethod === method ? { ...t, paymentMethod: targetMethod } : t));
+      setSettings(prev => ({
+        ...prev,
+        fixedExpenses: (prev.fixedExpenses || []).map(fe => fe.paymentMethod === method ? { ...fe, paymentMethod: targetMethod } : fe)
+      }));
+    }
+    
+    setPaymentMethods(prev => prev.filter(m => m !== method));
+    
+    setSettings(prev => {
+       let newSettings = JSON.parse(JSON.stringify(prev));
+       if (newSettings.closingDays?.default) delete newSettings.closingDays.default[method];
+       if (newSettings.dueDays?.default) delete newSettings.dueDays.default[method];
+       if (newSettings.closingDays?.overrides) {
+         Object.keys(newSettings.closingDays.overrides).forEach(month => {
+           if (newSettings.closingDays.overrides[month]) delete newSettings.closingDays.overrides[month][method];
+         });
+       }
+       if (newSettings.dueDays?.overrides) {
+         Object.keys(newSettings.dueDays.overrides).forEach(month => {
+           if (newSettings.dueDays.overrides[month]) delete newSettings.dueDays.overrides[month][method];
+         });
+       }
+       return newSettings;
+    });
+  };
+
 
   useEffect(() => {
     localStorage.setItem('@ControleFinanceiro:transactions', JSON.stringify(transactions));
   }, [transactions]);
+
+  useEffect(() => {
+    localStorage.setItem('@ControleFinanceiro:categories', JSON.stringify(categories));
+  }, [categories]);
 
   useEffect(() => {
     localStorage.setItem('@ControleFinanceiro:settings', JSON.stringify(settings));
@@ -121,6 +226,46 @@ export const TransactionsProvider = ({ children }) => {
         }
       };
     });
+  };
+
+  const addCategory = (categoryData) => {
+    setCategories(prev => [...prev, { name: categoryData.name.toUpperCase(), limit: parseFloat(categoryData.limit) || 0 }]);
+  };
+
+  const updateCategory = (oldName, newName, newLimit) => {
+    const formattedNewName = newName.toUpperCase();
+    setCategories(prev => prev.map(c => c.name === oldName ? { name: formattedNewName, limit: parseFloat(newLimit) || 0 } : c));
+    
+    if (oldName !== formattedNewName) {
+      setTransactions(prev => prev.map(t => t.category === oldName ? { ...t, category: formattedNewName } : t));
+      
+      // Update fixed expenses categories
+      setSettings(prev => ({
+        ...prev,
+        fixedExpenses: (prev.fixedExpenses || []).map(fe => fe.category === oldName ? { ...fe, category: formattedNewName } : fe)
+      }));
+    }
+  };
+
+  const deleteCategory = (name, substituteCategoryName = null) => {
+    if (substituteCategoryName) {
+      setTransactions(prev => prev.map(t => t.category === name ? { ...t, category: substituteCategoryName } : t));
+      
+      // Update fixed expenses categories
+      setSettings(prev => ({
+        ...prev,
+        fixedExpenses: (prev.fixedExpenses || []).map(fe => fe.category === name ? { ...fe, category: substituteCategoryName } : fe)
+      }));
+    } else {
+      setTransactions(prev => prev.filter(t => t.category !== name));
+      
+      // Delete fixed expenses tied to this category
+      setSettings(prev => ({
+        ...prev,
+        fixedExpenses: (prev.fixedExpenses || []).filter(fe => fe.category !== name)
+      }));
+    }
+    setCategories(prev => prev.filter(c => c.name !== name));
   };
 
   const addFixedExpense = (expense) => {
@@ -375,7 +520,7 @@ export const TransactionsProvider = ({ children }) => {
   const accumulatedBalance = calculateAccumulatedBalance();
   const finalBalance = accumulatedBalance + monthNet;
 
-  const expensesByCategory = CATEGORIES.map((cat) => {
+  const expensesByCategory = categories.map((cat) => {
     const catTransactions = allExpenses.filter((t) => t.category === cat.name);
     const spent = catTransactions.reduce((acc, t) => acc + t.amount, 0);
     return {
@@ -386,7 +531,7 @@ export const TransactionsProvider = ({ children }) => {
     };
   });
 
-  const expensesByPaymentMethod = PAYMENT_METHODS.map((method) => {
+  const expensesByPaymentMethod = paymentMethods.map((method) => {
     // IMPORTANTE: Aqui usamos allExpenses (Pessoais + Terceiros) para que bata com a fatura real
     const spent = allExpenses
       .filter((t) => t.paymentMethod === method)
@@ -697,7 +842,15 @@ export const TransactionsProvider = ({ children }) => {
         paidItems,
         togglePaidStatus,
         getEffectiveMonth,
-        openAttachment
+        openAttachment,
+        categories,
+        addCategory,
+        updateCategory,
+        deleteCategory,
+        paymentMethods,
+        addPaymentMethod,
+        updatePaymentMethod,
+        deletePaymentMethod
       }}
     >
       {children}

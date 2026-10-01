@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { useTransactions, CATEGORIES, PAYMENT_METHODS, INCOME_SOURCES } from '../context/TransactionsContext';
+import { useTransactions, INCOME_SOURCES } from '../context/TransactionsContext';
 import { X } from 'lucide-react';
 import { format } from 'date-fns';
 
 const TransactionForm = ({ onClose, initialData }) => {
-  const { addTransaction, editTransaction, currentMonth } = useTransactions();
+  const { addTransaction, editTransaction, currentMonth, categories } = useTransactions();
   
   const defaultDate = format(new Date(), 'yyyy-MM-dd').startsWith(currentMonth) 
     ? format(new Date(), 'yyyy-MM-dd') 
@@ -14,8 +14,8 @@ const TransactionForm = ({ onClose, initialData }) => {
   const [description, setDescription] = useState(initialData?.description || '');
   const [amount, setAmount] = useState(initialData?.amount || '');
   const [date, setDate] = useState(initialData?.date || defaultDate);
-  const [category, setCategory] = useState(initialData?.category || CATEGORIES[0].name);
-  const [paymentMethod, setPaymentMethod] = useState(initialData?.paymentMethod || PAYMENT_METHODS[0]);
+  const [category, setCategory] = useState(initialData?.category || categories[0]?.name || '');
+  const [paymentMethod, setPaymentMethod] = useState(initialData?.paymentMethod || paymentMethods?.[0] || 'DINHEIRO/PIX');
   const [source, setSource] = useState(initialData?.source || INCOME_SOURCES[0]);
   const [installments, setInstallments] = useState(1);
   const [details, setDetails] = useState(initialData?.details || '');
@@ -168,7 +168,7 @@ const TransactionForm = ({ onClose, initialData }) => {
                     value={category} 
                     onChange={(e) => setCategory(e.target.value)}
                   >
-                    {CATEGORIES.map(c => (
+                    {categories.map(c => (
                       <option key={c.name} value={c.name}>{c.name}</option>
                     ))}
                   </select>
@@ -186,7 +186,7 @@ const TransactionForm = ({ onClose, initialData }) => {
                       }
                     }}
                   >
-                    {PAYMENT_METHODS.map(m => (
+                    {paymentMethods.map(m => (
                       <option key={m} value={m}>{m}</option>
                     ))}
                   </select>

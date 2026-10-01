@@ -1,10 +1,73 @@
 import React, { useState } from 'react';
 import { useTransactions } from '../context/TransactionsContext';
-import { ArrowUpCircle, ArrowDownCircle, Wallet, CreditCard, PieChart, Users, ChevronDown, ChevronUp, Paperclip } from 'lucide-react';
+import { ArrowUpCircle, ArrowDownCircle, Wallet, CreditCard, PieChart as PieChartIcon, Users, ChevronDown, ChevronUp, Paperclip, Settings as SettingsIcon } from 'lucide-react';
+import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
+import CategoryManagerModal from './CategoryManagerModal';
 
 const formatCurrency = (value) => {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 };
+
+const RADIAN = Math.PI / 180;
+const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, index }) => {
+  const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+  const x = cx + radius * Math.cos(-midAngle * RADIAN);
+  const y = cy + radius * Math.sin(-midAngle * RADIAN);
+
+  if (percent < 0.02) return null; // Oculta fatias muito pequenas
+
+  return (
+    <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize="12px" fontWeight="bold">
+      {`${(percent * 100).toFixed(1)}%`}
+    </text>
+  );
+};
+
+const CustomTooltip = ({ active, payload }) => {
+  if (active && payload && payload.length) {
+    return (
+      <div style={{ backgroundColor: '#ffffff', padding: '12px', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
+        <p style={{ margin: '0 0 5px 0', fontWeight: 'bold', fontSize: '0.85rem', color: '#334155', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          {payload[0].name}
+        </p>
+        <p style={{ margin: 0, color: payload[0].payload.fill, fontWeight: 'bold', fontSize: '1.1rem' }}>
+          {formatCurrency(payload[0].value)}
+        </p>
+      </div>
+    );
+  }
+  return null;
+};
+
+const AreaTooltip = ({ active, payload, label }) => {
+  if (active && payload && payload.length) {
+    return (
+      <div style={{ backgroundColor: '#ffffff', padding: '12px', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
+        <p style={{ margin: '0 0 8px 0', fontWeight: 'bold', fontSize: '0.9rem', color: '#334155' }}>
+          {label}
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <p style={{ margin: 0, color: '#0088FE', fontWeight: 'bold' }}>
+            Saldo: {formatCurrency(payload[0].payload.saldo)}
+          </p>
+          {payload[0].payload.receitas > 0 && (
+            <p style={{ margin: 0, color: '#00C49F', fontSize: '0.85rem' }}>
+              Entradas: {formatCurrency(payload[0].payload.receitas)}
+            </p>
+          )}
+          {payload[0].payload.despesas > 0 && (
+            <p style={{ margin: 0, color: '#FF8042', fontSize: '0.85rem' }}>
+              Saídas: {formatCurrency(payload[0].payload.despesas)}
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
+
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658', '#8dd1e1', '#a4de6c', '#d0ed57', '#f15c80', '#e4d354', '#2b908f', '#f45b5b', '#91e8e1', '#FF6633', '#FFB399', '#FF33FF'];
 
 const Dashboard = () => {
   const {
@@ -17,10 +80,14 @@ const Dashboard = () => {
     expensesByPaymentMethod,
     incomesBySource,
     thirdPartyDebtTotal,
-    openAttachment
+    openAttachment,
+    currentMonthTransactions,
+    currentMonth,
+    settings
   } = useTransactions();
 
   const [expandedCategories, setExpandedCategories] = useState({});
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
 
   const toggleCategory = (catName) => {
     setExpandedCategories(prev => ({
@@ -28,6 +95,66 @@ const Dashboard = () => {
       [catName]: !prev[catName]
     }));
   };
+
+  const chartData = expensesByCategory
+    .filter(cat => cat.spent > 0)
+    .sort((a, b) => b.spent - a.spent)
+    .map(cat => ({
+      name: cat.name,
+      value: cat.spent
+    }));
+
+  const [yearStr, monthStr] = currentMonth.split('-');
+  const daysInMonth = new Date(parseInt(yearStr), parseInt(monthStr), 0).getDate();
+  const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+  const shortMonth = monthNames[parseInt(monthStr) - 1];
+
+  let currentBalance = accumulatedBalance;
+  const dailyData = [];
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    let dayIncome = 0;
+    let dayExpense = 0;
+
+    currentMonthTransactions.forEach(t => {
+      let txDay = 1;
+      
+      if (t.paymentMethod && t.paymentMethod.startsWith('CARTÃO')) {
+        const dueDay = settings?.dueDays?.overrides?.[currentMonth]?.[t.paymentMethod] 
+                    ?? settings?.dueDays?.default?.[t.paymentMethod] 
+                    ?? 10;
+        txDay = parseInt(dueDay);
+      } else {
+        const dateStr = t.originalDate || t.date;
+        if (dateStr) {
+          const parts = dateStr.split('-');
+          if (parts.length === 3) {
+            txDay = parseInt(parts[2]);
+          }
+        }
+      }
+
+      if (txDay > daysInMonth) txDay = daysInMonth;
+
+      if (txDay === d) {
+        if (t.type === 'income') {
+          dayIncome += t.amount;
+        } else if (t.type === 'expense' && t.category !== 'DÍVIDA DE TERCEIROS') {
+          dayExpense += t.amount;
+        }
+      }
+    });
+
+    currentBalance += (dayIncome - dayExpense);
+
+    dailyData.push({
+      day: `${d.toString().padStart(2, '0')} ${shortMonth}`,
+      dayNum: d,
+      saldo: currentBalance,
+      receitas: dayIncome,
+      despesas: dayExpense
+    });
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -145,9 +272,18 @@ const Dashboard = () => {
 
       {/* Categorias e Limites */}
       <div className="card">
-        <div className="flex items-center gap-2 mb-6">
-          <PieChart size={20} className="text-muted" />
-          <h3>Resumo das Categorias</h3>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-2">
+            <PieChartIcon size={20} className="text-muted" />
+            <h3>Resumo das Categorias</h3>
+          </div>
+          <button 
+            className="btn btn-secondary flex items-center gap-2" 
+            onClick={() => setIsCategoryModalOpen(true)}
+            style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
+          >
+            <SettingsIcon size={16} /> Gerenciar
+          </button>
         </div>
         
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -249,6 +385,103 @@ const Dashboard = () => {
         </div>
       </div>
 
+      {/* Gráfico de Despesas */}
+      {chartData.length > 0 && (
+        <div className="card" style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <div className="flex items-center gap-2 mb-6" style={{ alignSelf: 'flex-start' }}>
+            <PieChartIcon size={20} className="text-muted" />
+            <h3>Saídas por categoria</h3>
+          </div>
+          <div style={{ width: '100%', height: 400 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={chartData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={renderCustomizedLabel}
+                  innerRadius="50%"
+                  outerRadius="80%"
+                  fill="#8884d8"
+                  dataKey="value"
+                  stroke="none"
+                >
+                  {chartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip content={<CustomTooltip />} />
+                <Legend layout="vertical" verticalAlign="middle" align="right" wrapperStyle={{ fontSize: '14px', paddingLeft: '20px' }} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {/* Gráfico de Projeção de Saldo Diário */}
+      {dailyData.length > 0 && (
+        <div className="card" style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <h3 style={{ marginBottom: '1.5rem', alignSelf: 'center' }}>Projeção para os próximos dias</h3>
+          <div style={{ width: '100%', height: 400 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={dailyData} margin={{ top: 20, right: 30, left: 20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorSaldo" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#0088FE" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#0088FE" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border-color, rgba(255,255,255,0.1))" />
+                <XAxis 
+                  dataKey="day" 
+                  tick={{ fontSize: 12, fill: 'var(--text-muted, #888)' }} 
+                  axisLine={false} 
+                  tickLine={false} 
+                  dy={10} 
+                  interval="preserveStartEnd"
+                  minTickGap={20}
+                />
+                <YAxis 
+                  orientation="right" 
+                  tick={{ fontSize: 12, fill: 'var(--text-muted, #888)' }} 
+                  axisLine={false} 
+                  tickLine={false} 
+                  dx={10}
+                  tickFormatter={(val) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(val)}
+                />
+                <Tooltip content={<AreaTooltip />} />
+                <Area 
+                  type="monotone" 
+                  dataKey="saldo" 
+                  stroke="#0088FE" 
+                  strokeWidth={4}
+                  fillOpacity={1} 
+                  fill="url(#colorSaldo)" 
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+          <div style={{ display: 'flex', gap: '20px', marginTop: '10px', fontSize: '0.85rem', color: 'var(--text-muted, #888)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <span style={{ width: '10px', height: '10px', backgroundColor: '#0088FE', borderRadius: '50%' }}></span>
+              Saldo
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <span style={{ width: '10px', height: '10px', backgroundColor: '#00C49F', borderRadius: '50%' }}></span>
+              Contas a receber
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <span style={{ width: '10px', height: '10px', backgroundColor: '#FF8042', borderRadius: '50%' }}></span>
+              Contas a pagar
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isCategoryModalOpen && (
+        <CategoryManagerModal onClose={() => setIsCategoryModalOpen(false)} />
+      )}
     </div>
   );
 };

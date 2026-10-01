@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { useTransactions, PAYMENT_METHODS, CATEGORIES } from '../context/TransactionsContext';
+import { useTransactions } from '../context/TransactionsContext';
+import PaymentMethodManagerModal from './PaymentMethodManagerModal';
 import { Settings as SettingsIcon, Trash2, PlusCircle, CreditCard, Edit2, Save } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -9,13 +10,14 @@ const formatCurrency = (value) => {
 };
 
 const Settings = () => {
-  const { settings, updateSettings, currentMonth, addFixedExpense, removeFixedExpense, editFixedExpense } = useTransactions();
+  const { settings, updateSettings, currentMonth, addFixedExpense, removeFixedExpense, editFixedExpense, categories, paymentMethods } = useTransactions();
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
   
   const [desc, setDesc] = useState('');
   const [amt, setAmt] = useState('');
   const [due, setDue] = useState('');
-  const [cat, setCat] = useState(CATEGORIES[0].name);
-  const [pay, setPay] = useState(PAYMENT_METHODS[0]);
+  const [cat, setCat] = useState(categories[0]?.name || '');
+  const [pay, setPay] = useState(paymentMethods?.[0] || 'DINHEIRO/PIX');
   const [editingFixedExpenseId, setEditingFixedExpenseId] = useState(null);
 
   const handleFixedIncomeChange = (source, value) => {
@@ -85,7 +87,7 @@ const Settings = () => {
   };
 
   const monthName = format(parseISO(`${currentMonth}-01`), 'MMMM yyyy', { locale: ptBR });
-  const creditCards = PAYMENT_METHODS.filter(m => m.startsWith('CARTÃO'));
+  const creditCards = paymentMethods.filter(m => m.startsWith('CARTÃO'));
   const fixedExpensesList = settings.fixedExpenses || [];
 
   return (
@@ -155,7 +157,7 @@ const Settings = () => {
           <div className="form-group" style={{ flex: '1 1 150px', marginBottom: 0 }}>
             <label className="form-label">Categoria</label>
             <select className="form-control" value={cat} onChange={e => setCat(e.target.value)}>
-              {CATEGORIES.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+              {categories.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
             </select>
           </div>
           <div className="form-group" style={{ flex: '1 1 150px', marginBottom: 0 }}>
@@ -168,7 +170,7 @@ const Settings = () => {
                 setDue(String(defaultDue));
               }
             }}>
-              {PAYMENT_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
+              {paymentMethods.map(m => <option key={m} value={m}>{m}</option>)}
             </select>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem', flex: '1 1 100px', marginBottom: 0 }}>
@@ -223,6 +225,7 @@ const Settings = () => {
         <div className="flex items-center gap-2 mb-6">
           <CreditCard size={24} className="text-warning" />
           <h2>Fechamento e Vencimento de Cartões (<span style={{ textTransform: 'capitalize' }}>{monthName}</span>)</h2>
+          <button className="btn btn-secondary" style={{ marginLeft: 'auto', padding: '0.25rem 0.75rem', fontSize: '0.85rem' }} onClick={() => setShowPaymentModal(true)}>Gerenciar Cartões</button>
         </div>
         <p className="text-muted mb-6" style={{ fontSize: '0.9rem' }}>
           Altere as datas especificamente para as faturas de <strong>{monthName}</strong>.
@@ -266,6 +269,7 @@ const Settings = () => {
         </table>
       </div>
 
+      {showPaymentModal && <PaymentMethodManagerModal onClose={() => setShowPaymentModal(false)} />}
     </div>
   );
 };

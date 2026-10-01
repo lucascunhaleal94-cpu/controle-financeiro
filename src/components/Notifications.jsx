@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useTransactions, PAYMENT_METHODS } from '../context/TransactionsContext';
+import { useTransactions } from '../context/TransactionsContext';
 import { Bell, CheckCircle2, AlertTriangle, AlertCircle } from 'lucide-react';
 import { format, parseISO, differenceInDays, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
