@@ -286,16 +286,27 @@ export const TransactionsProvider = ({ children }) => {
     });
   };
 
-  const updateFixedExpenseOverride = (baseId, month, newAmount) => {
+  const updateFixedExpenseOverride = (baseId, month, overrideData) => {
     const currentOverrides = settings.fixedExpensesOverrides || {};
     const expenseOverrides = currentOverrides[baseId] || {};
     
+    let updatedMonthData;
+    if (typeof overrideData === 'object') {
+      const existing = expenseOverrides[month];
+      updatedMonthData = {
+        ...(typeof existing === 'object' ? existing : { amount: existing }),
+        ...overrideData
+      };
+    } else {
+      updatedMonthData = overrideData;
+    }
+
     updateSettings({
       fixedExpensesOverrides: {
         ...currentOverrides,
         [baseId]: {
           ...expenseOverrides,
-          [month]: newAmount
+          [month]: updatedMonthData
         }
       }
     });
@@ -453,27 +464,39 @@ export const TransactionsProvider = ({ children }) => {
 
       if (settings.fixedExpenses) {
         settings.fixedExpenses.forEach(fe => {
-          const overrideAmount = settings.fixedExpensesOverrides?.[fe.id]?.[mStr];
+          const override = settings.fixedExpensesOverrides?.[fe.id]?.[mStr];
+          const isObj = override !== null && typeof override === 'object';
+          
+          let overrideAmount = isObj ? override.amount : override;
           const finalAmount = overrideAmount !== undefined && overrideAmount !== '' 
                               ? parseFloat(overrideAmount) 
                               : parseFloat(fe.amount);
 
           if (finalAmount > 0) {
             const dayStr = String(fe.dueDate).padStart(2, '0');
-            const originalDate = `${mStr}-${dayStr}`;
+            const defaultDate = `${mStr}-${dayStr}`;
+            
+            const originalDate = isObj && override.date ? override.date : defaultDate;
+            const finalDesc = isObj && override.description ? override.description : fe.description + ' (Fixo)';
+            const finalCat = isObj && override.category ? override.category : fe.category;
+            const finalPay = isObj && override.paymentMethod ? override.paymentMethod : fe.paymentMethod;
 
             virtuals.push({
               id: `fixed-expense-${fe.id}-${mStr}`,
               baseId: fe.id,
               overrideMonth: mStr,
               type: 'expense',
-              description: fe.description + ' (Fixo)',
+              description: finalDesc,
               amount: finalAmount,
               originalDate,
               date: originalDate,
-              category: fe.category,
-              paymentMethod: fe.paymentMethod,
-              isFixedExpense: true
+              category: finalCat,
+              paymentMethod: finalPay,
+              source: null,
+              isFixedExpense: true,
+              hasAttachment: false,
+              installmentsTotal: 1,
+              currentInstallment: 1
             });
           }
         });

@@ -4,7 +4,7 @@ import { X } from 'lucide-react';
 import { format } from 'date-fns';
 
 const TransactionForm = ({ onClose, initialData }) => {
-  const { addTransaction, editTransaction, currentMonth, categories } = useTransactions();
+  const { addTransaction, editTransaction, currentMonth, categories, paymentMethods, updateFixedExpenseOverride } = useTransactions();
   
   const defaultDate = format(new Date(), 'yyyy-MM-dd').startsWith(currentMonth) 
     ? format(new Date(), 'yyyy-MM-dd') 
@@ -36,7 +36,17 @@ const TransactionForm = ({ onClose, initialData }) => {
     };
 
     if (initialData) {
-      editTransaction(initialData.id, data);
+      if (initialData.isFixedExpense) {
+        updateFixedExpenseOverride(initialData.baseId, initialData.overrideMonth, {
+          amount: parseFloat(data.amount),
+          description: data.description,
+          date: data.date,
+          category: data.category,
+          paymentMethod: data.paymentMethod
+        });
+      } else {
+        editTransaction(initialData.id, data);
+      }
     } else {
       addTransaction({ ...data, installments });
     }

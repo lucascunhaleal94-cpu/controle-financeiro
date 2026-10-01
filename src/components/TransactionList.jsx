@@ -109,15 +109,7 @@ const TransactionList = ({ onEdit }) => {
     return sortConfig.direction === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />;
   };
 
-  const handleEditOverride = (t) => {
-    const newVal = window.prompt(`Alterar valor de "${t.description}" apenas para este mês (${currentMonth}):`, t.amount);
-    if (newVal !== null && newVal !== '') {
-      const parsed = parseFloat(newVal.replace(',', '.'));
-      if (!isNaN(parsed)) {
-        updateFixedExpenseOverride(t.baseId, t.overrideMonth, parsed);
-      }
-    }
-  };
+  
 
   const handleTogglePaid = (t) => {
     if (t.isFixedExpense) {
