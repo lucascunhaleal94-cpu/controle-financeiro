@@ -32,9 +32,10 @@ export const INCOME_SOURCES = ['LUCAS', 'GABRIELA'];
 
 export const useTransactions = () => useContext(TransactionsContext);
 
-export const TransactionsProvider = ({ children }) => {
+export const TransactionsProvider = ({ children, currentUser }) => {
+  const getStorageKey = (key) => `@ControleFinanceiro_${currentUser.id}:${key}`;
   const [transactions, setTransactions] = useState(() => {
-    const saved = localStorage.getItem('@ControleFinanceiro:transactions');
+    const saved = localStorage.getItem(getStorageKey('transactions'));
     if (saved) return JSON.parse(saved);
     return [];
   });
@@ -66,7 +67,7 @@ export const TransactionsProvider = ({ children }) => {
       }
     };
 
-    const saved = localStorage.getItem('@ControleFinanceiro:settings');
+    const saved = localStorage.getItem(getStorageKey('settings'));
     if (saved) {
       const parsed = JSON.parse(saved);
       return {
@@ -86,13 +87,13 @@ export const TransactionsProvider = ({ children }) => {
   });
 
   const [paidItems, setPaidItems] = useState(() => {
-    const saved = localStorage.getItem('@ControleFinanceiro:paidItems');
+    const saved = localStorage.getItem(getStorageKey('paidItems'));
     if (saved) return JSON.parse(saved);
     return {};
   });
 
   const [categories, setCategories] = useState(() => {
-    const saved = localStorage.getItem('@ControleFinanceiro:categories');
+    const saved = localStorage.getItem(getStorageKey('categories'));
     if (saved) return JSON.parse(saved);
     return CATEGORIES;
   });
@@ -100,13 +101,13 @@ export const TransactionsProvider = ({ children }) => {
   const [currentMonth, setCurrentMonth] = useState(format(new Date(), 'yyyy-MM'));
 
   const [paymentMethods, setPaymentMethods] = useState(() => {
-    const saved = localStorage.getItem('@ControleFinanceiro:paymentMethods');
+    const saved = localStorage.getItem(getStorageKey('paymentMethods'));
     if (saved) return JSON.parse(saved);
     return DEFAULT_PAYMENT_METHODS;
   });
 
   useEffect(() => {
-    localStorage.setItem('@ControleFinanceiro:paymentMethods', JSON.stringify(paymentMethods));
+    localStorage.setItem(getStorageKey('paymentMethods'), JSON.stringify(paymentMethods));
   }, [paymentMethods]);
 
   const addPaymentMethod = (method) => {
@@ -195,19 +196,19 @@ export const TransactionsProvider = ({ children }) => {
 
 
   useEffect(() => {
-    localStorage.setItem('@ControleFinanceiro:transactions', JSON.stringify(transactions));
+    localStorage.setItem(getStorageKey('transactions'), JSON.stringify(transactions));
   }, [transactions]);
 
   useEffect(() => {
-    localStorage.setItem('@ControleFinanceiro:categories', JSON.stringify(categories));
+    localStorage.setItem(getStorageKey('categories'), JSON.stringify(categories));
   }, [categories]);
 
   useEffect(() => {
-    localStorage.setItem('@ControleFinanceiro:settings', JSON.stringify(settings));
+    localStorage.setItem(getStorageKey('settings'), JSON.stringify(settings));
   }, [settings]);
 
   useEffect(() => {
-    localStorage.setItem('@ControleFinanceiro:paidItems', JSON.stringify(paidItems));
+    localStorage.setItem(getStorageKey('paidItems'), JSON.stringify(paidItems));
   }, [paidItems]);
 
   const updateSettings = (newSettings) => {
@@ -596,7 +597,8 @@ export const TransactionsProvider = ({ children }) => {
   });
 
   useEffect(() => {
-    const imported = localStorage.getItem('@ControleFinanceiro:importedOct2026');
+    if (currentUser?.email !== 'lucas@admin.com') return;
+    const imported = localStorage.getItem(getStorageKey('importedOct2026'));
     if (!imported) {
       const items = [
         { desc: "VIAGEM 30 ANOS", cat: "LAZER", parcels: 4, val: 1303.58 },
@@ -644,12 +646,13 @@ export const TransactionsProvider = ({ children }) => {
       });
 
       setTransactions(prev => [...prev, ...newTx]);
-      localStorage.setItem('@ControleFinanceiro:importedOct2026', 'true');
+      localStorage.setItem(getStorageKey('importedOct2026'), 'true');
     }
   }, []);
 
   useEffect(() => {
-    const importedPart2 = localStorage.getItem('@ControleFinanceiro:importedOct2026_part2');
+    if (currentUser?.email !== 'lucas@admin.com') return;
+    const importedPart2 = localStorage.getItem(getStorageKey('importedOct2026_part2'));
     if (!importedPart2) {
       const items = [
         { desc: "CADERNO INTELIGENTE", cat: "EDUCAÇÃO", pay: "CARTÃO SANTANDER", parcels: 1, val: 88.79 },
@@ -697,12 +700,13 @@ export const TransactionsProvider = ({ children }) => {
       });
 
       setTransactions(prev => [...prev, ...newTx]);
-      localStorage.setItem('@ControleFinanceiro:importedOct2026_part2', 'true');
+      localStorage.setItem(getStorageKey('importedOct2026_part2'), 'true');
     }
   }, []);
 
   useEffect(() => {
-    const importedPart3 = localStorage.getItem('@ControleFinanceiro:importedOct2026_part3');
+    if (currentUser?.email !== 'lucas@admin.com') return;
+    const importedPart3 = localStorage.getItem(getStorageKey('importedOct2026_part3'));
     if (!importedPart3) {
       const items = [
         { desc: "WHEY + SUPER COFFE + OMEGA", cat: "SAÚDE", pay: "CARTÃO SANTANDER", parcels: 3, val: 470.62 },
@@ -750,12 +754,13 @@ export const TransactionsProvider = ({ children }) => {
       });
 
       setTransactions(prev => [...prev, ...newTx]);
-      localStorage.setItem('@ControleFinanceiro:importedOct2026_part3', 'true');
+      localStorage.setItem(getStorageKey('importedOct2026_part3'), 'true');
     }
   }, []);
 
   useEffect(() => {
-    const importedPart4 = localStorage.getItem('@ControleFinanceiro:importedOct2026_part4');
+    if (currentUser?.email !== 'lucas@admin.com') return;
+    const importedPart4 = localStorage.getItem(getStorageKey('importedOct2026_part4'));
     if (!importedPart4) {
       const items = [
         { desc: "HL PNEUS (ACQUARELA)", cat: "DÍVIDA DE TERCEIROS", pay: "CARTÃO SANTANDER", parcels: 6, val: 354.70 },
@@ -803,12 +808,13 @@ export const TransactionsProvider = ({ children }) => {
       });
 
       setTransactions(prev => [...prev, ...newTx]);
-      localStorage.setItem('@ControleFinanceiro:importedOct2026_part4', 'true');
+      localStorage.setItem(getStorageKey('importedOct2026_part4'), 'true');
     }
   }, []);
 
   useEffect(() => {
-    const importedPart5 = localStorage.getItem('@ControleFinanceiro:importedOct2026_part5');
+    if (currentUser?.email !== 'lucas@admin.com') return;
+    const importedPart5 = localStorage.getItem(getStorageKey('importedOct2026_part5'));
     if (!importedPart5) {
       const items = [
         { desc: "REGISTROS DOS CONTAINERS (ACQUARELA)", cat: "DÍVIDA DE TERCEIROS", pay: "CARTÃO SANTANDER", parcels: 2, val: 70.00 },
@@ -847,23 +853,25 @@ export const TransactionsProvider = ({ children }) => {
       });
 
       setTransactions(prev => [...prev, ...newTx]);
-      localStorage.setItem('@ControleFinanceiro:importedOct2026_part5', 'true');
+      localStorage.setItem(getStorageKey('importedOct2026_part5'), 'true');
     }
   }, []);
 
   useEffect(() => {
-    const adjustedInitialBalance = localStorage.getItem('@ControleFinanceiro:adjustedInitialBalance_Oct');
+    if (currentUser?.email !== 'lucas@admin.com') return;
+    const adjustedInitialBalance = localStorage.getItem(getStorageKey('adjustedInitialBalance_Oct'));
     if (!adjustedInitialBalance) {
       updateSettings({
         appStartDate: '2026-10',
         initialBalance: -3886.71
       });
-      localStorage.setItem('@ControleFinanceiro:adjustedInitialBalance_Oct', 'true');
+      localStorage.setItem(getStorageKey('adjustedInitialBalance_Oct'), 'true');
     }
   }, []);
 
   useEffect(() => {
-    const importedPart6 = localStorage.getItem('@ControleFinanceiro:importedOct2026_part6');
+    if (currentUser?.email !== 'lucas@admin.com') return;
+    const importedPart6 = localStorage.getItem(getStorageKey('importedOct2026_part6'));
     if (!importedPart6) {
       const items = [
         { desc: "ROLAMENTOS CAMINHÃO (ACQUARELA)", cat: "DÍVIDA DE TERCEIROS", pay: "CARTÃO SANTANDER", parcels: 3, val: 63.33 },
@@ -911,12 +919,13 @@ export const TransactionsProvider = ({ children }) => {
       });
 
       setTransactions(prev => [...prev, ...newTx]);
-      localStorage.setItem('@ControleFinanceiro:importedOct2026_part6', 'true');
+      localStorage.setItem(getStorageKey('importedOct2026_part6'), 'true');
     }
   }, []);
 
   useEffect(() => {
-    const importedPart7 = localStorage.getItem('@ControleFinanceiro:importedOct2026_part7');
+    if (currentUser?.email !== 'lucas@admin.com') return;
+    const importedPart7 = localStorage.getItem(getStorageKey('importedOct2026_part7'));
     if (!importedPart7) {
       const items = [
         { desc: "ANUIDADE DO MY CAPITAL (ACQUARELA)", cat: "DÍVIDA DE TERCEIROS", pay: "CARTÃO SANTANDER", parcels: 1, val: 252.90 },
@@ -960,7 +969,7 @@ export const TransactionsProvider = ({ children }) => {
       });
 
       setTransactions(prev => [...prev, ...newTx]);
-      localStorage.setItem('@ControleFinanceiro:importedOct2026_part7', 'true');
+      localStorage.setItem(getStorageKey('importedOct2026_part7'), 'true');
     }
   }, []);
 
@@ -986,11 +995,11 @@ export const TransactionsProvider = ({ children }) => {
   const importBackup = (jsonData) => {
     try {
       const parsed = JSON.parse(jsonData);
-      if (parsed.transactions) localStorage.setItem('@ControleFinanceiro:transactions', JSON.stringify(parsed.transactions));
-      if (parsed.settings) localStorage.setItem('@ControleFinanceiro:settings', JSON.stringify(parsed.settings));
-      if (parsed.paidItems) localStorage.setItem('@ControleFinanceiro:paidItems', JSON.stringify(parsed.paidItems));
-      if (parsed.categories) localStorage.setItem('@ControleFinanceiro:categories', JSON.stringify(parsed.categories));
-      if (parsed.paymentMethods) localStorage.setItem('@ControleFinanceiro:paymentMethods', JSON.stringify(parsed.paymentMethods));
+      if (parsed.transactions) localStorage.setItem(getStorageKey('transactions'), JSON.stringify(parsed.transactions));
+      if (parsed.settings) localStorage.setItem(getStorageKey('settings'), JSON.stringify(parsed.settings));
+      if (parsed.paidItems) localStorage.setItem(getStorageKey('paidItems'), JSON.stringify(parsed.paidItems));
+      if (parsed.categories) localStorage.setItem(getStorageKey('categories'), JSON.stringify(parsed.categories));
+      if (parsed.paymentMethods) localStorage.setItem(getStorageKey('paymentMethods'), JSON.stringify(parsed.paymentMethods));
       alert('Backup importado com sucesso! A página será recarregada.');
       window.location.reload();
     } catch (e) {

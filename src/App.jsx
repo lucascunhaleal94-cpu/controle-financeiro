@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useTransactions } from './context/TransactionsContext';
 import { format, parseISO, subMonths, addMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, PlusCircle, LayoutDashboard, ListOrdered, Settings as SettingsIcon } from 'lucide-react';
+import { ChevronLeft, ChevronRight, PlusCircle, LayoutDashboard, ListOrdered, Settings as SettingsIcon, LogOut } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import TransactionList from './components/TransactionList';
 import TransactionForm from './components/TransactionForm';
@@ -13,6 +13,12 @@ function App() {
   const { currentMonth, setCurrentMonth } = useTransactions();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard', 'list', or 'settings'
+  const [currentUser] = useState(() => JSON.parse(localStorage.getItem('@ControleFinanceiro:activeUser')));
+
+  const handleLogout = () => {
+    localStorage.removeItem('@ControleFinanceiro:activeUser');
+    window.location.reload();
+  };
 
   const handlePrevMonth = () => {
     const current = parseISO(`${currentMonth}-01`);
@@ -52,7 +58,12 @@ function App() {
             <h1 style={{ fontSize: '1.5rem', color: 'var(--primary-color)' }}>Controle Financeiro</h1>
             <Notifications />
           </div>
-          <p className="text-muted">Lucas & Gabriela</p>
+          <div className="flex items-center gap-4" style={{ marginTop: '0.25rem' }}>
+            <p className="text-muted" style={{ margin: 0 }}>{currentUser?.name}</p>
+            <button onClick={handleLogout} style={{ background: 'none', border: 'none', color: 'var(--danger-color)', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+              <LogOut size={14} /> Sair
+            </button>
+          </div>
         </div>
         
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
