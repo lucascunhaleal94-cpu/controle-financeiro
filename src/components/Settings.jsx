@@ -10,7 +10,7 @@ const formatCurrency = (value) => {
 };
 
 const Settings = () => {
-  const { settings, updateSettings, currentMonth, addFixedExpense, removeFixedExpense, editFixedExpense, categories, paymentMethods } = useTransactions();
+  const { settings, updateSettings, currentMonth, addFixedExpense, removeFixedExpense, editFixedExpense, categories, paymentMethods, exportBackup, importBackup } = useTransactions();
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   
   const [desc, setDesc] = useState('');
@@ -89,6 +89,17 @@ const Settings = () => {
   const monthName = format(parseISO(`${currentMonth}-01`), 'MMMM yyyy', { locale: ptBR });
   const creditCards = paymentMethods.filter(m => m.startsWith('CARTÃO'));
   const fixedExpensesList = settings.fixedExpenses || [];
+
+  const handleImport = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      importBackup(evt.target.result);
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', maxWidth: '800px', margin: '0 auto', width: '100%' }}>
@@ -267,6 +278,27 @@ const Settings = () => {
             })}
           </tbody>
         </table>
+      </div>
+
+      <div className="card">
+        <div className="flex items-center gap-2 mb-6">
+          <SettingsIcon size={24} className="text-primary" />
+          <h2>Backup (Exportar e Importar)</h2>
+        </div>
+        <p className="text-muted" style={{ marginBottom: '1.5rem' }}>
+          Use estas opções para transferir seus dados entre o sistema local (computador) e a versão publicada na nuvem (Vercel).
+        </p>
+        <div style={{ display: 'flex', gap: '1rem' }}>
+          <button className="btn btn-outline" onClick={exportBackup}>
+            Baixar Dados Atuais
+          </button>
+          <div>
+            <input type="file" id="importFile" accept=".json" style={{ display: 'none' }} onChange={handleImport} />
+            <label htmlFor="importFile" className="btn btn-primary" style={{ cursor: 'pointer', display: 'inline-block', margin: 0 }}>
+              Importar Arquivo de Dados
+            </label>
+          </div>
+        </div>
       </div>
 
       {showPaymentModal && <PaymentMethodManagerModal onClose={() => setShowPaymentModal(false)} />}

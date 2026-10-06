@@ -964,6 +964,41 @@ export const TransactionsProvider = ({ children }) => {
     }
   }, []);
 
+  const exportBackup = () => {
+    const backup = {
+      transactions,
+      settings,
+      paidItems,
+      categories,
+      paymentMethods
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `backup_controle_financeiro_${format(new Date(), 'yyyy-MM-dd')}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const importBackup = (jsonData) => {
+    try {
+      const parsed = JSON.parse(jsonData);
+      if (parsed.transactions) localStorage.setItem('@ControleFinanceiro:transactions', JSON.stringify(parsed.transactions));
+      if (parsed.settings) localStorage.setItem('@ControleFinanceiro:settings', JSON.stringify(parsed.settings));
+      if (parsed.paidItems) localStorage.setItem('@ControleFinanceiro:paidItems', JSON.stringify(parsed.paidItems));
+      if (parsed.categories) localStorage.setItem('@ControleFinanceiro:categories', JSON.stringify(parsed.categories));
+      if (parsed.paymentMethods) localStorage.setItem('@ControleFinanceiro:paymentMethods', JSON.stringify(parsed.paymentMethods));
+      alert('Backup importado com sucesso! A página será recarregada.');
+      window.location.reload();
+    } catch (e) {
+      console.error(e);
+      alert('Erro ao importar backup. Verifique se o arquivo é válido.');
+    }
+  };
+
   return (
     <TransactionsContext.Provider
       value={{
@@ -1001,7 +1036,9 @@ export const TransactionsProvider = ({ children }) => {
         paymentMethods,
         addPaymentMethod,
         updatePaymentMethod,
-        deletePaymentMethod
+        deletePaymentMethod,
+        exportBackup,
+        importBackup
       }}
     >
       {children}
