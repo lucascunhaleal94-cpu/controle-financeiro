@@ -27,6 +27,7 @@ const TransactionList = ({ onEdit }) => {
     );
   }
 
+  const [deleteConfirmTx, setDeleteConfirmTx] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' });
   const [filters, setFilters] = useState({
     description: '',
@@ -289,15 +290,13 @@ const TransactionList = ({ onEdit }) => {
                           <button 
                             onClick={() => {
                               if(t.groupId) {
-                                if(window.confirm('Esta é uma compra parcelada. Deseja excluir TODAS as parcelas dessa compra?')) {
-                                  deleteTransaction(t.id);
-                                }
+                                setDeleteConfirmTx(t);
                               } else {
                                 deleteTransaction(t.id);
                               }
                             }}
                             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
-                            title={t.groupId ? "Excluir todas as parcelas" : "Excluir"}
+                            title={t.groupId ? "Opções de Exclusão" : "Excluir"}
                           >
                             <Trash2 size={18} />
                           </button>
@@ -311,6 +310,28 @@ const TransactionList = ({ onEdit }) => {
           </tbody>
         </table>
       </div>
+
+      {deleteConfirmTx && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div className="card" style={{ width: '90%', maxWidth: '400px', backgroundColor: 'var(--bg-main)', margin: 'auto' }}>
+            <h3 style={{ marginBottom: '1rem' }}>Excluir Lançamento Parcelado</h3>
+            <p style={{ marginBottom: '1.5rem', color: 'var(--text-muted)' }}>
+              Você está excluindo o lançamento "<strong>{deleteConfirmTx.description}</strong>". O que deseja fazer?
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <button className="btn btn-outline" onClick={() => { deleteTransaction(deleteConfirmTx.id, 'single'); setDeleteConfirmTx(null); }}>
+                Excluir somente esta parcela
+              </button>
+              <button className="btn btn-danger" onClick={() => { deleteTransaction(deleteConfirmTx.id, 'subsequent'); setDeleteConfirmTx(null); }}>
+                Excluir esta e as parcelas seguintes
+              </button>
+              <button className="btn" style={{ backgroundColor: 'transparent', color: 'var(--text-muted)' }} onClick={() => setDeleteConfirmTx(null)}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

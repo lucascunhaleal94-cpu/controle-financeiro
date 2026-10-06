@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useTransactions } from '../context/TransactionsContext';
 import { ArrowUpCircle, ArrowDownCircle, Wallet, CreditCard, PieChart as PieChartIcon, Users, ChevronDown, ChevronUp, Paperclip, Settings as SettingsIcon } from 'lucide-react';
-import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, LineChart, Line } from 'recharts';
 import CategoryManagerModal from './CategoryManagerModal';
 
 const formatCurrency = (value) => {
@@ -83,7 +83,10 @@ const Dashboard = () => {
     openAttachment,
     currentMonthTransactions,
     currentMonth,
-    settings
+    settings,
+    allTransactions,
+    categories,
+    getEffectiveMonth
   } = useTransactions();
 
   const [expandedCategories, setExpandedCategories] = useState({});
@@ -155,6 +158,42 @@ const Dashboard = () => {
       despesas: dayExpense
     });
   }
+
+  const [expandedHistory, setExpandedHistory] = useState({});
+  const toggleHistory = (catName) => {
+    setExpandedHistory(prev => ({ ...prev, [catName]: !prev[catName] }));
+  };
+
+  const getCategoryHistory = (categoryName) => {
+    const uniqueMonthsSet = new Set(allTransactions.map(t => getEffectiveMonth(t)).filter(Boolean));
+    const uniqueMonths = [...uniqueMonthsSet].sort();
+    
+    if (uniqueMonths.length === 0) {
+      uniqueMonths.push(currentMonth);
+    }
+
+    const catLimit = categories.find(c => c.name === categoryName)?.limit || 0;
+
+    return uniqueMonths.map(month => {
+      const monthExpenses = allTransactions.filter(t => 
+        t.type === 'expense' && 
+        t.category === categoryName && 
+        getEffectiveMonth(t) === month
+      );
+      const gasto = monthExpenses.reduce((acc, t) => acc + t.amount, 0);
+
+      const [y, m] = month.split('-');
+      const monthNamesShort = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+      const label = `${monthNamesShort[parseInt(m, 10) - 1]}/${y.substring(2)}`;
+
+      return {
+        monthRaw: month,
+        label,
+        gasto,
+        limite: catLimit
+      };
+    });
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -418,6 +457,63 @@ const Dashboard = () => {
           </div>
         </div>
       )}
+
+      {/* Histórico das categorias */}
+      <div className="card" style={{ marginTop: '1.5rem' }}>
+        <div className="flex items-center gap-2 mb-6">
+          <PieChartIcon size={20} className="text-muted" />
+          <h3>Histórico das categorias</h3>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          {categories.map(cat => {
+            const isExpanded = !!expandedHistory[cat.name];
+            let historyData = [];
+            if (isExpanded) {
+              historyData = getCategoryHistory(cat.name);
+            }
+            
+            return (
+              <div key={cat.name} style={{ border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden' }}>
+                <div 
+                  onClick={() => toggleHistory(cat.name)}
+                  style={{ 
+                    padding: '1rem', 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center', 
+                    cursor: 'pointer',
+                    backgroundColor: 'var(--bg-secondary)',
+                    fontWeight: '600'
+                  }}
+                >
+                  <span>{cat.name}</span>
+                  {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                </div>
+                {isExpanded && (
+                  <div style={{ padding: '1.5rem', backgroundColor: 'var(--bg-main)', borderTop: '1px solid var(--border-color)' }}>
+                    <div style={{ width: '100%', height: 300 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={historyData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                          <XAxis dataKey="label" stroke="var(--text-muted)" fontSize={12} tickMargin={10} />
+                          <YAxis stroke="var(--text-muted)" fontSize={12} tickFormatter={(val) => `R$ ${val}`} width={80} />
+                          <Tooltip 
+                            formatter={(value, name) => [formatCurrency(value), name === 'gasto' ? 'Gasto Real' : 'Limite']}
+                            contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                          />
+                          <Legend />
+                          <Line type="monotone" dataKey="limite" name="Limite Máx" stroke="#ef4444" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                          <Line type="monotone" dataKey="gasto" name="Gasto Real" stroke="#3b82f6" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Gráfico de Projeção de Saldo Diário */}
       {dailyData.length > 0 && (

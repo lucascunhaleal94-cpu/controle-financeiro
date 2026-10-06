@@ -20,6 +20,7 @@ const TransactionForm = ({ onClose, initialData }) => {
   const [installments, setInstallments] = useState(1);
   const [details, setDetails] = useState(initialData?.details || '');
   const [attachment, setAttachment] = useState(null);
+  const [editConfirmData, setEditConfirmData] = useState(null);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -44,14 +45,19 @@ const TransactionForm = ({ onClose, initialData }) => {
           category: data.category,
           paymentMethod: data.paymentMethod
         });
+        onClose();
       } else {
-        editTransaction(initialData.id, data);
+        if (initialData.groupId) {
+          setEditConfirmData(data);
+        } else {
+          editTransaction(initialData.id, data);
+          onClose();
+        }
       }
     } else {
       addTransaction({ ...data, installments });
+      onClose();
     }
-
-    onClose();
   };
 
   const isCreditCard = type === 'expense' && paymentMethod.startsWith('CARTÃO');
@@ -243,6 +249,28 @@ const TransactionForm = ({ onClose, initialData }) => {
           </button>
         </form>
       </div>
+
+      {editConfirmData && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }}>
+          <div className="card" style={{ width: '90%', maxWidth: '400px', backgroundColor: 'var(--bg-main)', margin: 'auto' }}>
+            <h3 style={{ marginBottom: '1rem' }}>Editar Lançamento Parcelado</h3>
+            <p style={{ marginBottom: '1.5rem', color: 'var(--text-muted)' }}>
+              Você está editando o lançamento "<strong>{initialData.description}</strong>". O que deseja fazer?
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <button className="btn btn-outline" onClick={() => { editTransaction(initialData.id, editConfirmData, 'single'); setEditConfirmData(null); onClose(); }}>
+                Editar somente esta parcela
+              </button>
+              <button className="btn btn-primary" onClick={() => { editTransaction(initialData.id, editConfirmData, 'subsequent'); setEditConfirmData(null); onClose(); }}>
+                Editar esta e as parcelas seguintes
+              </button>
+              <button className="btn" style={{ backgroundColor: 'transparent', color: 'var(--text-muted)' }} onClick={() => setEditConfirmData(null)}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
