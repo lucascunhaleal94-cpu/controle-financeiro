@@ -16,7 +16,7 @@ const SupabaseSync = ({ currentUser, children }) => {
     description: tx.description,
     amount: tx.amount,
     date: tx.date,
-    original_date: tx.originalDate,
+    original_date: tx.originalDate || tx.date,
     details: tx.details || '',
     category: tx.category || null,
     payment_method: tx.paymentMethod || null,
