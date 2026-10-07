@@ -8,6 +8,7 @@ import TransactionList from './components/TransactionList';
 import TransactionForm from './components/TransactionForm';
 import Settings from './components/Settings';
 import Notifications from './components/Notifications';
+import { supabase } from './lib/supabase';
 
 function App() {
   const { currentMonth, setCurrentMonth } = useTransactions();
@@ -15,7 +16,8 @@ function App() {
   const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard', 'list', or 'settings'
   const [currentUser] = useState(() => JSON.parse(localStorage.getItem('@ControleFinanceiro:activeUser')));
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     localStorage.removeItem('@ControleFinanceiro:activeUser');
     window.location.reload();
   };
