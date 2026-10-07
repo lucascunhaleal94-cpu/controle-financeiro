@@ -54,13 +54,13 @@ function App() {
   return (
     <div className="container">
       {/* Header & Navigation */}
-      <header className="glass-panel" style={{ padding: '1.5rem', marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <div className="flex items-center gap-4">
-            <h1 style={{ fontSize: '1.5rem', color: 'var(--primary-color)' }}>Controle Financeiro</h1>
+      <header className="glass-panel app-header" style={{ padding: '1.5rem', marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ width: '100%' }}>
+          <div className="flex items-center header-title-container" style={{ gap: '1rem', justifyContent: 'space-between' }}>
+            <h1 style={{ fontSize: '1.5rem', color: 'var(--primary-color)', margin: 0 }}>Controle Financeiro</h1>
             <Notifications />
           </div>
-          <div className="flex items-center gap-4" style={{ marginTop: '0.25rem' }}>
+          <div className="flex items-center" style={{ marginTop: '0.5rem', gap: '1rem', justifyContent: 'space-between' }}>
             <p className="text-muted" style={{ margin: 0 }}>{currentUser?.name}</p>
             <button onClick={handleLogout} style={{ background: 'none', border: 'none', color: 'var(--danger-color)', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
               <LogOut size={14} /> Sair
@@ -68,11 +68,11 @@ function App() {
           </div>
         </div>
         
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+        <div className="app-header-right" style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '0.5rem' }}>
           <button className="btn btn-outline" onClick={handlePrevMonth} style={{ padding: '0.5rem' }}>
             <ChevronLeft size={20} />
           </button>
-          <span style={{ fontWeight: '600', minWidth: '150px', textAlign: 'center' }}>
+          <span style={{ fontWeight: '600', minWidth: '150px', textAlign: 'center', flex: 1 }}>
             {formatMonthDisplay()}
           </span>
           <button className="btn btn-outline" onClick={handleNextMonth} style={{ padding: '0.5rem' }}>
@@ -82,7 +82,7 @@ function App() {
       </header>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
+      <div className="tabs-container" style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
         <button 
           className={`btn ${activeTab === 'dashboard' ? 'btn-primary' : 'btn-outline'}`}
           onClick={() => setActiveTab('dashboard')}

@@ -240,3 +240,34 @@ h1, h2, h3, h4, h5, h6 {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
 }
+
+/* Responsive Helpers */
+@media (max-width: 768px) {
+  .app-header {
+    flex-direction: column !important;
+    gap: 1rem;
+    align-items: flex-start !important;
+  }
+  .app-header-right {
+    width: 100%;
+    justify-content: space-between !important;
+  }
+  .header-title-container {
+    flex-wrap: wrap;
+    gap: 0.5rem !important;
+  }
+  h1 {
+    font-size: 1.25rem !important;
+  }
+  .dashboard-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .tabs-container {
+    flex-direction: column !important;
+    width: 100%;
+  }
+  .tabs-container button {
+    width: 100%;
+    justify-content: center;
+  }
+}
