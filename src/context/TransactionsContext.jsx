@@ -1000,6 +1000,7 @@ export const TransactionsProvider = ({ children, currentUser }) => {
       if (parsed.paidItems) localStorage.setItem(getStorageKey('paidItems'), JSON.stringify(parsed.paidItems));
       if (parsed.categories) localStorage.setItem(getStorageKey('categories'), JSON.stringify(parsed.categories));
       if (parsed.paymentMethods) localStorage.setItem(getStorageKey('paymentMethods'), JSON.stringify(parsed.paymentMethods));
+      sessionStorage.setItem('force_cloud_upload', 'true');
       alert('Backup importado com sucesso! A página será recarregada.');
       window.location.reload();
     } catch (e) {

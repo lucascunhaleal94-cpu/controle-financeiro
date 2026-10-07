@@ -56,8 +56,9 @@ const SupabaseSync = ({ currentUser, children }) => {
         const { data: dbPaymentMethods } = await supabase.from('payment_methods').select('*').eq('user_id', currentUser.id);
 
         let hasCloudData = dbTransactions && dbTransactions.length > 0;
+        const forceUpload = sessionStorage.getItem('force_cloud_upload') === 'true';
 
-        if (hasCloudData) {
+        if (hasCloudData && !forceUpload) {
           // Substituir contexto local pelos dados da nuvem
           const localTransactions = dbTransactions.map(mapToLocal);
           
@@ -84,7 +85,7 @@ const SupabaseSync = ({ currentUser, children }) => {
              localStorage.setItem(getStorageKey('paymentMethods'), JSON.stringify(methods));
           }
 
-          // A pǭgina precisarǭ recarregar para pegar os dados corretos no Contexto
+          // A página precisará recarregar para pegar os dados corretos no Contexto
           // Ou podemos simplesmente usar window.location.reload()
           const wasSynced = sessionStorage.getItem('has_synced_cloud');
           if (!wasSynced) {
@@ -93,17 +94,25 @@ const SupabaseSync = ({ currentUser, children }) => {
             return;
           }
         } else {
-           // Nǜo hǭ dados na nuvem, vamos fazer upload do localStorage (Migraǜo)
+           // Não há dados na nuvem, ou forçamos o upload (Migração ou Importação)
            if (context.transactions && context.transactions.length > 0) {
-             console.log('Migrando dados locais para a nuvem...');
+             console.log('Enviando dados locais para a nuvem...');
+             
+             // Limpar dados antigos da nuvem se for um import forçado para evitar duplicação (opcional mas recomendado se for import total)
+             if (forceUpload) {
+               await supabase.from('transactions').delete().eq('user_id', currentUser.id);
+             }
+
              await supabase.from('transactions').upsert(context.transactions.map(mapToDB));
              await supabase.from('user_settings').upsert({ user_id: currentUser.id, settings: context.settings });
              
              const piToPush = Object.entries(context.paidItems || {}).map(([key, val]) => ({ user_id: currentUser.id, item_id: key, is_paid: val }));
              if (piToPush.length > 0) await supabase.from('paid_items').upsert(piToPush);
              
-             // Categories e Payment Methods ignorados na migraǜo simples para economizar cdigo, 
-             // mas podem ser adicionados facilmente.
+             if (forceUpload) {
+               sessionStorage.removeItem('force_cloud_upload');
+               sessionStorage.setItem('has_synced_cloud', 'true');
+             }
            }
         }
 
