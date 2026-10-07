@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Wallet, LogIn, UserPlus } from 'lucide-react';
-import { v4 as uuidv4 } from 'uuid';
+import { supabase } from '../lib/supabase';
 
 const AuthScreen = ({ onLogin }) => {
   const [isLogin, setIsLogin] = useState(true);
@@ -8,29 +8,53 @@ const AuthScreen = ({ onLogin }) => {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
 
-    const users = JSON.parse(localStorage.getItem('@ControleFinanceiro:users') || '[]');
-
-    if (isLogin) {
-      const user = users.find(u => u.email === email && u.password === password);
-      if (user) {
-        onLogin(user);
+    try {
+      if (isLogin) {
+        const { data, error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password
+        });
+        
+        if (signInError) throw signInError;
+        
+        onLogin({
+          id: data.user.id,
+          name: data.user.user_metadata?.name || email,
+          email: data.user.email
+        });
       } else {
-        setError('E-mail ou senha incorretos.');
+        const { data, error: signUpError } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              name: name
+            }
+          }
+        });
+
+        if (signUpError) throw signUpError;
+        
+        if (data?.user) {
+          onLogin({
+            id: data.user.id,
+            name: data.user.user_metadata?.name || email,
+            email: data.user.email
+          });
+        }
       }
-    } else {
-      if (users.some(u => u.email === email)) {
-        setError('Este e-mail já está cadastrado.');
-        return;
-      }
-      const newUser = { id: uuidv4(), name, email, password };
-      users.push(newUser);
-      localStorage.setItem('@ControleFinanceiro:users', JSON.stringify(users));
-      onLogin(newUser);
+    } catch (err) {
+      console.error(err);
+      setError(err.message === 'Invalid login credentials' ? 'E-mail ou senha incorretos.' : err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -55,7 +79,7 @@ const AuthScreen = ({ onLogin }) => {
           </div>
           <h2 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>Controle Financeiro</h2>
           <p className="text-muted text-center" style={{ fontSize: '0.9rem' }}>
-            {isLogin ? 'Faça login para acessar seus dados.' : 'Crie sua conta local para começar.'}
+            {isLogin ? 'Faça login para acessar seus dados na nuvem.' : 'Crie sua conta na nuvem para começar.'}
           </p>
         </div>
 
@@ -92,8 +116,8 @@ const AuthScreen = ({ onLogin }) => {
               placeholder="••••••••"
             />
           </div>
-          <button type="submit" className="btn btn-primary w-full" style={{ padding: '0.875rem', marginTop: '0.5rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
-            {isLogin ? <><LogIn size={18} /> Entrar</> : <><UserPlus size={18} /> Criar Conta</>}
+          <button disabled={loading} type="submit" className="btn btn-primary w-full" style={{ padding: '0.875rem', marginTop: '0.5rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
+            {loading ? 'Carregando...' : (isLogin ? <><LogIn size={18} /> Entrar</> : <><UserPlus size={18} /> Criar Conta</>)}
           </button>
         </form>
 
@@ -104,8 +128,9 @@ const AuthScreen = ({ onLogin }) => {
           <button
             onClick={() => { setIsLogin(!isLogin); setError(''); }}
             style={{ background: 'none', border: 'none', color: 'var(--primary-color)', cursor: 'pointer', fontWeight: '500', fontSize: '0.95rem' }}
+            disabled={loading}
           >
-            {isLogin ? 'Criar uma conta local' : 'Fazer login'}
+            {isLogin ? 'Criar uma conta' : 'Fazer login'}
           </button>
         </div>
       </div>
