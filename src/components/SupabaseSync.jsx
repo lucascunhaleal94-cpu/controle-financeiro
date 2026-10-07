@@ -98,20 +98,31 @@ const SupabaseSync = ({ currentUser, children }) => {
            if (context.transactions && context.transactions.length > 0) {
              console.log('Enviando dados locais para a nuvem...');
              
-             // Limpar dados antigos da nuvem se for um import forçado para evitar duplicação (opcional mas recomendado se for import total)
-             if (forceUpload) {
-               await supabase.from('transactions').delete().eq('user_id', currentUser.id);
-             }
+             try {
+               if (forceUpload) {
+                 await supabase.from('transactions').delete().eq('user_id', currentUser.id);
+               }
 
-             await supabase.from('transactions').upsert(context.transactions.map(mapToDB));
-             await supabase.from('user_settings').upsert({ user_id: currentUser.id, settings: context.settings });
-             
-             const piToPush = Object.entries(context.paidItems || {}).map(([key, val]) => ({ user_id: currentUser.id, item_id: key, is_paid: val }));
-             if (piToPush.length > 0) await supabase.from('paid_items').upsert(piToPush);
-             
-             if (forceUpload) {
-               sessionStorage.removeItem('force_cloud_upload');
-               sessionStorage.setItem('has_synced_cloud', 'true');
+               const { error: txErr } = await supabase.from('transactions').upsert(context.transactions.map(mapToDB));
+               if (txErr) throw new Error('Transações: ' + txErr.message);
+
+               const { error: stgErr } = await supabase.from('user_settings').upsert({ user_id: currentUser.id, settings: context.settings });
+               if (stgErr) throw new Error('Settings: ' + stgErr.message);
+               
+               const piToPush = Object.entries(context.paidItems || {}).map(([key, val]) => ({ user_id: currentUser.id, item_id: key, is_paid: val }));
+               if (piToPush.length > 0) {
+                 const { error: piErr } = await supabase.from('paid_items').upsert(piToPush);
+                 if (piErr) throw new Error('Paid Items: ' + piErr.message);
+               }
+               
+               if (forceUpload) {
+                 sessionStorage.removeItem('force_cloud_upload');
+                 sessionStorage.setItem('has_synced_cloud', 'true');
+                 alert('Nuvem atualizada com sucesso com o seu backup!');
+               }
+             } catch (err) {
+               console.error('Erro forçando upload:', err);
+               alert('Erro ao enviar para a nuvem: ' + err.message);
              }
            }
         }
