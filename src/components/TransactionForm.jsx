@@ -32,6 +32,7 @@ const TransactionForm = ({ onClose, initialData }) => {
       description,
       amount,
       date,
+      originalDate: date,
       dueDate: type === 'expense' && !isCreditCard ? (dueDate || date) : null,
       details,
       attachment,

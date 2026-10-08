@@ -64,7 +64,7 @@ const safeFormatDate = (dateString, formatStr) => {
     }
     if (filters.date) {
       result = result.filter(t => {
-        const displayDate = t.originalDate || t.date;
+        const displayDate = t.date || t.originalDate;
         const formatted = safeFormatDate(displayDate, "dd 'de' MMM").toLowerCase();
         return formatted.includes(filters.date.toLowerCase());
       });
@@ -80,8 +80,8 @@ const safeFormatDate = (dateString, formatStr) => {
     if (sortConfig) {
       result.sort((a, b) => {
         if (sortConfig.key === 'date') {
-          const dateA = new Date(a.originalDate || a.date).getTime() || 0;
-          const dateB = new Date(b.originalDate || b.date).getTime() || 0;
+          const dateA = new Date(a.date || a.originalDate).getTime() || 0;
+          const dateB = new Date(b.date || b.originalDate).getTime() || 0;
           return sortConfig.direction === 'asc' ? dateA - dateB : dateB - dateA;
         }
         if (sortConfig.key === 'dueDate') {
@@ -258,7 +258,7 @@ const safeFormatDate = (dateString, formatStr) => {
           </thead>
           <tbody>
             {processedTransactions.map((t) => {
-              const displayDate = t.originalDate || t.date;
+              const displayDate = t.date || t.originalDate;
               const isPaid = t.isPaid;
               const effMonth = t.overrideMonth || currentMonth;
               

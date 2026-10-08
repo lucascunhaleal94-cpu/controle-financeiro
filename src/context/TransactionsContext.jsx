@@ -314,7 +314,7 @@ export const TransactionsProvider = ({ children, currentUser }) => {
   };
 
   const getEffectiveMonth = (t) => {
-    const baseDate = t.originalDate || t.date;
+    const baseDate = t.date || t.originalDate;
     if (!baseDate) return currentMonth;
     
     if (t.type === 'income' || !t.paymentMethod?.startsWith('CARTÃO')) {
