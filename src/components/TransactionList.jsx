@@ -9,6 +9,14 @@ const formatCurrency = (value) => {
 };
 
 const TransactionList = ({ onEdit }) => {
+
+const safeFormatDate = (dateString, formatStr) => {
+  if (!dateString) return '-';
+  const d = parseISO(dateString);
+  if (isNaN(d.getTime())) return '-';
+  return format(d, formatStr, { locale: ptBR });
+};
+
   const { 
     currentMonthTransactions, 
     deleteTransaction, 
@@ -57,14 +65,14 @@ const TransactionList = ({ onEdit }) => {
     if (filters.date) {
       result = result.filter(t => {
         const displayDate = t.originalDate || t.date;
-        const formatted = format(parseISO(displayDate), "dd 'de' MMM", { locale: ptBR }).toLowerCase();
+        const formatted = safeFormatDate(displayDate, "dd 'de' MMM").toLowerCase();
         return formatted.includes(filters.date.toLowerCase());
       });
     }
     if (filters.dueDate) {
       result = result.filter(t => {
         if (!t.computedDueDate) return false;
-        const formatted = format(parseISO(t.computedDueDate), "dd 'de' MMM", { locale: ptBR }).toLowerCase();
+        const formatted = safeFormatDate(t.computedDueDate, "dd 'de' MMM").toLowerCase();
         return formatted.includes(filters.dueDate.toLowerCase());
       });
     }
@@ -72,13 +80,13 @@ const TransactionList = ({ onEdit }) => {
     if (sortConfig) {
       result.sort((a, b) => {
         if (sortConfig.key === 'date') {
-          const dateA = new Date(a.originalDate || a.date);
-          const dateB = new Date(b.originalDate || b.date);
+          const dateA = new Date(a.originalDate || a.date).getTime() || 0;
+          const dateB = new Date(b.originalDate || b.date).getTime() || 0;
           return sortConfig.direction === 'asc' ? dateA - dateB : dateB - dateA;
         }
         if (sortConfig.key === 'dueDate') {
-          const dateA = new Date(a.computedDueDate || a.date);
-          const dateB = new Date(b.computedDueDate || b.date);
+          const dateA = new Date(a.computedDueDate || a.date).getTime() || 0;
+          const dateB = new Date(b.computedDueDate || b.date).getTime() || 0;
           return sortConfig.direction === 'asc' ? dateA - dateB : dateB - dateA;
         }
         if (sortConfig.key === 'amount') {
@@ -251,21 +259,28 @@ const TransactionList = ({ onEdit }) => {
                   statusColor = "var(--income-color)";
                   statusBg = "rgba(16, 185, 129, 0.1)";
                 } else {
-                  const today = startOfDay(new Date());
-                  const dueDate = startOfDay(parseISO(t.computedDueDate || displayDate));
-                  
-                  if (isToday(dueDate)) {
-                    statusText = "VENCE HOJE";
-                    statusColor = "#eab308"; // yellow-500
-                    statusBg = "rgba(234, 179, 8, 0.1)";
-                  } else if (isBefore(dueDate, today)) {
-                    statusText = "VENCIDA";
-                    statusColor = "var(--expense-color)";
-                    statusBg = "rgba(239, 68, 68, 0.1)";
+                  const parsedDueDate = parseISO(t.computedDueDate || displayDate);
+                  if (isNaN(parsedDueDate.getTime())) {
+                    statusText = "DATA INVÁLIDA";
+                    statusColor = "var(--text-muted)";
+                    statusBg = "transparent";
                   } else {
-                    statusText = "A VENCER";
-                    statusColor = "#3b82f6"; // blue-500
-                    statusBg = "rgba(59, 130, 246, 0.1)";
+                    const today = startOfDay(new Date());
+                    const dueDate = startOfDay(parsedDueDate);
+                    
+                    if (isToday(dueDate)) {
+                      statusText = "VENCE HOJE";
+                      statusColor = "#eab308"; // yellow-500
+                      statusBg = "rgba(234, 179, 8, 0.1)";
+                    } else if (isBefore(dueDate, today)) {
+                      statusText = "VENCIDA";
+                      statusColor = "var(--expense-color)";
+                      statusBg = "rgba(239, 68, 68, 0.1)";
+                    } else {
+                      statusText = "A VENCER";
+                      statusColor = "#3b82f6"; // blue-500
+                      statusBg = "rgba(59, 130, 246, 0.1)";
+                    }
                   }
                 }
               }
@@ -314,13 +329,13 @@ const TransactionList = ({ onEdit }) => {
                   <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>
                     <div className="flex items-center gap-2">
                       <Calendar size={14} />
-                      {format(parseISO(displayDate), "dd/MM", { locale: ptBR })}
+                      {safeFormatDate(displayDate, "dd/MM")}
                     </div>
                   </td>
                   <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>
                     {t.type === 'expense' ? (
                       <div className="flex items-center gap-2" style={{ fontWeight: '500' }}>
-                        {format(parseISO(t.computedDueDate || displayDate), "dd/MM", { locale: ptBR })}
+                        {safeFormatDate(t.computedDueDate || displayDate, "dd/MM")}
                       </div>
                     ) : '-'}
                   </td>
