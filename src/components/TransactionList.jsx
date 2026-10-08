@@ -135,20 +135,15 @@ const safeFormatDate = (dateString, formatStr) => {
   
 
   
+  
   const handleBulkPay = () => {
     if (selectedTx.length === 0) return;
-    const toggledCards = new Set();
     selectedTx.forEach(txId => {
       const t = currentMonthTransactions.find(x => x.id === txId);
       if (t && !t.isPaid) {
         const effMonth = t.overrideMonth || currentMonth;
         if (t.isFixedExpense) {
           togglePaidStatus(effMonth, t.baseId);
-        } else if (t.paymentMethod?.startsWith('CARTÃO')) {
-          if (!toggledCards.has(t.paymentMethod)) {
-            togglePaidStatus(effMonth, t.paymentMethod);
-            toggledCards.add(t.paymentMethod);
-          }
         } else {
           togglePaidStatus(effMonth, t.id);
         }
@@ -161,19 +156,15 @@ const safeFormatDate = (dateString, formatStr) => {
     const effMonth = t.overrideMonth || currentMonth;
     if (t.isFixedExpense) {
       togglePaidStatus(effMonth, t.baseId);
-    } else if (t.paymentMethod?.startsWith('CARTÃO')) {
-      const isCurrentlyPaid = paidItems[currentMonth]?.[t.paymentMethod];
-      if (!isCurrentlyPaid) {
-        if (window.confirm(`Isso marcará a fatura inteira do ${t.paymentMethod} deste mês como PAGA. Deseja continuar?`)) {
-          togglePaidStatus(currentMonth, t.paymentMethod);
+    } else {
+      const isCardPaid = t.paymentMethod?.startsWith('CARTÃO') && paidItems[effMonth]?.[t.paymentMethod];
+      if (isCardPaid) {
+        if (window.confirm(`A fatura inteira do ${t.paymentMethod} está marcada como paga. Para alterar itens individualmente, deseja desmarcar o pagamento total da fatura (deixando os demais itens pendentes)?`)) {
+          togglePaidStatus(effMonth, t.paymentMethod);
         }
       } else {
-        if (window.confirm(`Desmarcar o pagamento da fatura do ${t.paymentMethod} deste mês?`)) {
-          togglePaidStatus(currentMonth, t.paymentMethod);
-        }
+        togglePaidStatus(effMonth, t.id);
       }
-    } else {
-      togglePaidStatus(effMonth, t.id);
     }
   };
 
