@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useTransactions } from '../context/TransactionsContext';
 import { Trash2, ArrowUpCircle, ArrowDownCircle, Calendar, Edit2, CheckCircle2, Paperclip, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, isToday, isBefore, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 const formatCurrency = (value) => {
@@ -28,10 +28,12 @@ const TransactionList = ({ onEdit }) => {
   }
 
   const [deleteConfirmTx, setDeleteConfirmTx] = useState(null);
-  const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' });
+  const [sortConfig, setSortConfig] = useState({ key: 'dueDate', direction: 'asc' });
+  const [selectedTx, setSelectedTx] = useState([]);
   const [filters, setFilters] = useState({
     description: '',
     date: '',
+    dueDate: '',
     category: '',
     paymentMethod: '',
     amount: ''
@@ -59,12 +61,24 @@ const TransactionList = ({ onEdit }) => {
         return formatted.includes(filters.date.toLowerCase());
       });
     }
+    if (filters.dueDate) {
+      result = result.filter(t => {
+        if (!t.computedDueDate) return false;
+        const formatted = format(parseISO(t.computedDueDate), "dd 'de' MMM", { locale: ptBR }).toLowerCase();
+        return formatted.includes(filters.dueDate.toLowerCase());
+      });
+    }
 
     if (sortConfig) {
       result.sort((a, b) => {
         if (sortConfig.key === 'date') {
           const dateA = new Date(a.originalDate || a.date);
           const dateB = new Date(b.originalDate || b.date);
+          return sortConfig.direction === 'asc' ? dateA - dateB : dateB - dateA;
+        }
+        if (sortConfig.key === 'dueDate') {
+          const dateA = new Date(a.computedDueDate || a.date);
+          const dateB = new Date(b.computedDueDate || b.date);
           return sortConfig.direction === 'asc' ? dateA - dateB : dateB - dateA;
         }
         if (sortConfig.key === 'amount') {
@@ -131,12 +145,28 @@ const TransactionList = ({ onEdit }) => {
 
   return (
     <div className="card" style={{ marginTop: '2rem' }}>
-      <h2 style={{ marginBottom: '1.5rem' }}>Lançamentos do Mês</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+        <h2 style={{ margin: 0 }}>Lançamentos do Mês</h2>
+        {selectedTx.length > 0 && (
+          <button onClick={handleBulkPay} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem', fontSize: '0.9rem' }}>
+            <CheckCircle2 size={16} /> Pagar Selecionados ({selectedTx.length})
+          </button>
+        )}
+      </div>
       
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
+              <th style={{ padding: '1rem', width: '40px' }}>
+                <input type="checkbox" onChange={(e) => {
+                  if (e.target.checked) {
+                    setSelectedTx(processedTransactions.filter(t => t.type === 'expense').map(t => t.id));
+                  } else {
+                    setSelectedTx([]);
+                  }
+                }} checked={selectedTx.length > 0 && selectedTx.length === processedTransactions.filter(t => t.type === 'expense').length} />
+              </th>
               <th style={{ padding: '1rem', fontWeight: '500' }}>
                 <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }} onClick={() => handleSort('description')}>
                   Descrição <SortIcon columnKey="description" />
@@ -154,6 +184,16 @@ const TransactionList = ({ onEdit }) => {
                 <input 
                   type="text" placeholder="Filtrar..." value={filters.date} 
                   onChange={(e) => handleFilterChange('date', e.target.value)}
+                  style={{ width: '100%', marginTop: '0.5rem', padding: '0.2rem 0.5rem', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'transparent', color: 'inherit' }}
+                />
+              </th>
+              <th style={{ padding: '1rem', fontWeight: '500' }}>
+                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }} onClick={() => handleSort('dueDate')}>
+                  Vencimento <SortIcon columnKey="dueDate" />
+                </div>
+                <input 
+                  type="text" placeholder="Filtrar..." value={filters.dueDate} 
+                  onChange={(e) => handleFilterChange('dueDate', e.target.value)}
                   style={{ width: '100%', marginTop: '0.5rem', padding: '0.2rem 0.5rem', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'transparent', color: 'inherit' }}
                 />
               </th>
@@ -194,22 +234,55 @@ const TransactionList = ({ onEdit }) => {
           <tbody>
             {processedTransactions.map((t) => {
               const displayDate = t.originalDate || t.date;
+              const isPaid = t.isPaid;
+              const effMonth = t.overrideMonth || currentMonth;
               
-              let isPaid = true; // Dinheiro/Pix e Incomes são pagos por padrão
-              let showStatusToggle = false;
-
-              if (t.type === 'expense') {
-                if (t.isFixedExpense) {
-                  isPaid = paidItems[t.overrideMonth]?.[t.baseId] || false;
-                  showStatusToggle = true;
-                } else if (t.paymentMethod?.startsWith('CARTÃO')) {
-                  isPaid = paidItems[currentMonth]?.[t.paymentMethod] || false;
-                  showStatusToggle = true;
+              let statusText = "";
+              let statusColor = "";
+              let statusBg = "";
+              
+              if (t.type === 'income') {
+                statusText = "PAGA";
+                statusColor = "var(--income-color)";
+                statusBg = "rgba(16, 185, 129, 0.1)";
+              } else {
+                if (isPaid) {
+                  statusText = "PAGA";
+                  statusColor = "var(--income-color)";
+                  statusBg = "rgba(16, 185, 129, 0.1)";
+                } else {
+                  const today = startOfDay(new Date());
+                  const dueDate = startOfDay(parseISO(t.computedDueDate || displayDate));
+                  
+                  if (isToday(dueDate)) {
+                    statusText = "VENCE HOJE";
+                    statusColor = "#eab308"; // yellow-500
+                    statusBg = "rgba(234, 179, 8, 0.1)";
+                  } else if (isBefore(dueDate, today)) {
+                    statusText = "VENCIDA";
+                    statusColor = "var(--expense-color)";
+                    statusBg = "rgba(239, 68, 68, 0.1)";
+                  } else {
+                    statusText = "A VENCER";
+                    statusColor = "#3b82f6"; // blue-500
+                    statusBg = "rgba(59, 130, 246, 0.1)";
+                  }
                 }
               }
 
               return (
-                <tr key={t.id} style={{ borderBottom: '1px solid var(--border-color)', transition: 'background-color 0.2s' }}>
+                <tr key={t.id} style={{ borderBottom: '1px solid var(--border-color)', transition: 'background-color 0.2s', backgroundColor: selectedTx.includes(t.id) ? 'rgba(59, 130, 246, 0.05)' : 'transparent' }}>
+                  <td style={{ padding: '1rem' }}>
+                    {t.type === 'expense' && (
+                      <input type="checkbox" checked={selectedTx.includes(t.id)} onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedTx(prev => [...prev, t.id]);
+                        } else {
+                          setSelectedTx(prev => prev.filter(id => id !== t.id));
+                        }
+                      }} />
+                    )}
+                  </td>
                   <td style={{ padding: '1rem' }}>
                     <div className="flex items-center gap-2">
                       {t.type === 'income' ? (
@@ -218,7 +291,7 @@ const TransactionList = ({ onEdit }) => {
                         <ArrowDownCircle size={18} className="text-expense" style={{ flexShrink: 0 }} />
                       )}
                       <div>
-                        <div style={{ fontWeight: '500', textDecoration: isPaid && t.type === 'expense' && showStatusToggle ? 'line-through' : 'none', opacity: isPaid && t.type === 'expense' && showStatusToggle ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <div style={{ fontWeight: '500', textDecoration: isPaid && t.type === 'expense' ? 'line-through' : 'none', opacity: isPaid && t.type === 'expense' ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                           {t.description}
                           {t.hasAttachment && (
                             <button 
@@ -241,8 +314,15 @@ const TransactionList = ({ onEdit }) => {
                   <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>
                     <div className="flex items-center gap-2">
                       <Calendar size={14} />
-                      {format(parseISO(displayDate), "dd 'de' MMM", { locale: ptBR })}
+                      {format(parseISO(displayDate), "dd/MM", { locale: ptBR })}
                     </div>
+                  </td>
+                  <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>
+                    {t.type === 'expense' ? (
+                      <div className="flex items-center gap-2" style={{ fontWeight: '500' }}>
+                        {format(parseISO(t.computedDueDate || displayDate), "dd/MM", { locale: ptBR })}
+                      </div>
+                    ) : '-'}
                   </td>
                   <td style={{ padding: '1rem' }}>
                     {t.type === 'expense' ? (
@@ -259,19 +339,25 @@ const TransactionList = ({ onEdit }) => {
                     {formatCurrency(t.amount)}
                   </td>
                   <td style={{ padding: '1rem', textAlign: 'center' }}>
-                    {showStatusToggle ? (
+                    {t.type === 'expense' ? (
                       <button
                         onClick={() => handleTogglePaid(t)}
                         style={{
-                          background: 'none', border: 'none', cursor: 'pointer',
-                          color: isPaid ? 'var(--income-color)' : 'var(--text-muted)'
+                          background: statusBg, border: 'none', cursor: 'pointer',
+                          color: statusColor, padding: '0.25rem 0.5rem', borderRadius: '4px',
+                          fontSize: '0.75rem', fontWeight: 'bold', width: '100%'
                         }}
-                        title={isPaid ? "Desmarcar como Pago" : "Marcar como Pago"}
                       >
-                        <CheckCircle2 size={20} />
+                        {statusText}
                       </button>
                     ) : (
-                      <CheckCircle2 size={20} style={{ color: 'var(--income-color)', opacity: 0.5 }} title="Pago na hora (Dinheiro/Pix)" />
+                      <div style={{
+                        background: statusBg,
+                        color: statusColor, padding: '0.25rem 0.5rem', borderRadius: '4px',
+                        fontSize: '0.75rem', fontWeight: 'bold', textAlign: 'center', width: '100%'
+                      }}>
+                        {statusText}
+                      </div>
                     )}
                   </td>
                   <td style={{ padding: '1rem', textAlign: 'right' }}>

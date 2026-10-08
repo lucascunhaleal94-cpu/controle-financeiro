@@ -14,6 +14,7 @@ const TransactionForm = ({ onClose, initialData }) => {
   const [description, setDescription] = useState(initialData?.description || '');
   const [amount, setAmount] = useState(initialData?.amount || '');
   const [date, setDate] = useState(initialData?.date || defaultDate);
+  const [dueDate, setDueDate] = useState(initialData?.dueDate || '');
   const [category, setCategory] = useState(initialData?.category || categories[0]?.name || '');
   const [paymentMethod, setPaymentMethod] = useState(initialData?.paymentMethod || paymentMethods?.[0] || 'DINHEIRO/PIX');
   const [source, setSource] = useState(initialData?.source || INCOME_SOURCES[0]);
@@ -31,6 +32,7 @@ const TransactionForm = ({ onClose, initialData }) => {
       description,
       amount,
       date,
+      dueDate: type === 'expense' && !isCreditCard ? (dueDate || date) : null,
       details,
       attachment,
       ...(type === 'expense' ? { category, paymentMethod } : { source })
@@ -173,6 +175,18 @@ const TransactionForm = ({ onClose, initialData }) => {
               />
             </div>
           </div>
+          
+          {type === 'expense' && !isCreditCard && (
+            <div className="form-group w-full" style={{ marginBottom: '1.5rem', marginTop: '1rem' }}>
+              <label className="form-label">Data de Vencimento (Opcional)</label>
+              <input
+                type="date"
+                className="form-control"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+              />
+            </div>
+          )}
 
           {type === 'expense' ? (
             <>

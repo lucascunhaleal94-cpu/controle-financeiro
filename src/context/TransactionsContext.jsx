@@ -372,6 +372,7 @@ export const TransactionsProvider = ({ children, currentUser }) => {
         description,
         amount: parcelAmount,
         originalDate: transaction.date,
+        dueDate: transaction.dueDate,
         date: transaction.date,
         details: transaction.details,
         hasAttachment: !!transaction.attachment,
@@ -536,7 +537,50 @@ export const TransactionsProvider = ({ children, currentUser }) => {
 
   const allTransactions = [...transactions, ...generateVirtualTransactions()];
 
-  const currentMonthTransactions = allTransactions.filter((t) => getEffectiveMonth(t) === currentMonth);
+  const currentMonthTransactions = allTransactions.filter((t) => getEffectiveMonth(t) === currentMonth).map(t => {
+    let computedDueDate = t.dueDate || t.date;
+    const effMonth = getEffectiveMonth(t);
+
+    if (t.type === 'expense') {
+      if (t.isFixedExpense) {
+        // fixed expense due date
+        const fe = (settings.fixedExpenses || []).find(f => f.id === t.baseId);
+        if (fe && fe.dueDate) {
+          computedDueDate = `${effMonth}-${String(fe.dueDate).padStart(2, '0')}`;
+        } else {
+          computedDueDate = `${effMonth}-01`;
+        }
+      } else if (t.paymentMethod && t.paymentMethod.startsWith('CARTÃO')) {
+        // credit card due date
+        const dueDay = settings.dueDays?.overrides?.[effMonth]?.[t.paymentMethod] 
+                    ?? settings.dueDays?.default?.[t.paymentMethod] 
+                    ?? 10;
+        computedDueDate = `${effMonth}-${String(dueDay).padStart(2, '0')}`;
+      }
+    }
+    
+    // isPaid logic
+    let isPaid = false;
+    if (t.type === 'expense') {
+      if (t.isFixedExpense) {
+        isPaid = paidItems[t.overrideMonth || effMonth]?.[t.baseId] || false;
+      } else if (t.paymentMethod && t.paymentMethod.startsWith('CARTÃO')) {
+        isPaid = paidItems[effMonth]?.[t.paymentMethod] || false;
+      } else {
+        // For other expenses, we track by their own ID
+        isPaid = paidItems[effMonth]?.[t.id] || false;
+      }
+    } else {
+      // Incomes can be considered paid or trackable? User said "contas", so expenses.
+      isPaid = true;
+    }
+
+    return {
+      ...t,
+      computedDueDate,
+      isPaid
+    };
+  });
 
   const incomes = currentMonthTransactions.filter((t) => t.type === 'income');
   const allExpenses = currentMonthTransactions.filter((t) => t.type === 'expense');
