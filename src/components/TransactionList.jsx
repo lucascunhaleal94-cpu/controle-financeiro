@@ -134,9 +134,33 @@ const safeFormatDate = (dateString, formatStr) => {
 
   
 
+  
+  const handleBulkPay = () => {
+    if (selectedTx.length === 0) return;
+    const toggledCards = new Set();
+    selectedTx.forEach(txId => {
+      const t = currentMonthTransactions.find(x => x.id === txId);
+      if (t && !t.isPaid) {
+        const effMonth = t.overrideMonth || currentMonth;
+        if (t.isFixedExpense) {
+          togglePaidStatus(effMonth, t.baseId);
+        } else if (t.paymentMethod?.startsWith('CARTÃO')) {
+          if (!toggledCards.has(t.paymentMethod)) {
+            togglePaidStatus(effMonth, t.paymentMethod);
+            toggledCards.add(t.paymentMethod);
+          }
+        } else {
+          togglePaidStatus(effMonth, t.id);
+        }
+      }
+    });
+    setSelectedTx([]);
+  };
+
   const handleTogglePaid = (t) => {
+    const effMonth = t.overrideMonth || currentMonth;
     if (t.isFixedExpense) {
-      togglePaidStatus(t.overrideMonth, t.baseId);
+      togglePaidStatus(effMonth, t.baseId);
     } else if (t.paymentMethod?.startsWith('CARTÃO')) {
       const isCurrentlyPaid = paidItems[currentMonth]?.[t.paymentMethod];
       if (!isCurrentlyPaid) {
@@ -148,6 +172,8 @@ const safeFormatDate = (dateString, formatStr) => {
           togglePaidStatus(currentMonth, t.paymentMethod);
         }
       }
+    } else {
+      togglePaidStatus(effMonth, t.id);
     }
   };
 
