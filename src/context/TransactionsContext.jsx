@@ -564,11 +564,11 @@ export const TransactionsProvider = ({ children, currentUser }) => {
     if (t.type === 'expense') {
       if (t.isFixedExpense) {
         isPaid = paidItems[t.overrideMonth || effMonth]?.[t.baseId] || false;
-      } else if (t.paymentMethod && t.paymentMethod.startsWith('CARTÃO')) {
-        isPaid = paidItems[effMonth]?.[t.paymentMethod] || false;
       } else {
-        // For other expenses, we track by their own ID
-        isPaid = paidItems[effMonth]?.[t.id] || false;
+        // For other expenses (incl. credit cards), we track by their own ID. 
+        // We also fallback to the whole card status for retro-compatibility.
+        const cardPaid = t.paymentMethod && t.paymentMethod.startsWith('CARTÃO') ? (paidItems[effMonth]?.[t.paymentMethod] || false) : false;
+        isPaid = paidItems[effMonth]?.[t.id] || cardPaid || false;
       }
     } else {
       // Incomes can be considered paid or trackable? User said "contas", so expenses.
