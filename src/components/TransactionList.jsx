@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+﻿import React, { useState, useMemo } from 'react';
 import { useTransactions } from '../context/TransactionsContext';
 import { Trash2, ArrowUpCircle, ArrowDownCircle, Calendar, Edit2, CheckCircle2, Paperclip, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { format, parseISO, isToday, isBefore, startOfDay } from 'date-fns';
@@ -38,6 +38,7 @@ const safeFormatDate = (dateString, formatStr) => {
   const [deleteConfirmTx, setDeleteConfirmTx] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: 'dueDate', direction: 'asc' });
   const [selectedTx, setSelectedTx] = useState([]);
+  const [isFixedExpanded, setIsFixedExpanded] = useState(false);
   const [filters, setFilters] = useState({
     description: '',
     date: '',
@@ -256,175 +257,361 @@ const safeFormatDate = (dateString, formatStr) => {
               <th style={{ padding: '1rem', width: '80px', textAlign: 'right', verticalAlign: 'top' }}>Ações</th>
             </tr>
           </thead>
-          <tbody>
-            {processedTransactions.map((t) => {
-              const displayDate = t.date || t.originalDate;
-              const isPaid = t.isPaid;
-              const effMonth = t.overrideMonth || currentMonth;
-              
-              let statusText = "";
-              let statusColor = "";
-              let statusBg = "";
-              
-              if (t.type === 'income') {
-                statusText = "PAGA";
-                statusColor = "var(--income-color)";
-                statusBg = "rgba(16, 185, 129, 0.1)";
-              } else {
-                if (isPaid) {
+                    <tbody>
+            {processedTransactions.filter(t => !t.isFixedExpense).map((t) => {
+              const renderTransactionRow = (t) => {
+                const displayDate = t.date || t.originalDate;
+                const isPaid = t.isPaid;
+                const effMonth = t.overrideMonth || currentMonth;
+                
+                let statusText = "";
+                let statusColor = "";
+                let statusBg = "";
+                
+                if (t.type === 'income') {
                   statusText = "PAGA";
                   statusColor = "var(--income-color)";
                   statusBg = "rgba(16, 185, 129, 0.1)";
                 } else {
-                  const parsedDueDate = parseISO(t.computedDueDate || displayDate);
-                  if (isNaN(parsedDueDate.getTime())) {
-                    statusText = "DATA INVÁLIDA";
-                    statusColor = "var(--text-muted)";
-                    statusBg = "transparent";
+                  if (isPaid) {
+                    statusText = "PAGA";
+                    statusColor = "var(--income-color)";
+                    statusBg = "rgba(16, 185, 129, 0.1)";
                   } else {
-                    const today = startOfDay(new Date());
-                    const dueDate = startOfDay(parsedDueDate);
-                    
-                    if (isToday(dueDate)) {
-                      statusText = "VENCE HOJE";
-                      statusColor = "#eab308"; // yellow-500
-                      statusBg = "rgba(234, 179, 8, 0.1)";
-                    } else if (isBefore(dueDate, today)) {
-                      statusText = "VENCIDA";
-                      statusColor = "var(--expense-color)";
-                      statusBg = "rgba(239, 68, 68, 0.1)";
+                    const parsedDueDate = parseISO(t.computedDueDate || displayDate);
+                    if (isNaN(parsedDueDate.getTime())) {
+                      statusText = "DATA INVÁLIDA";
+                      statusColor = "var(--text-muted)";
+                      statusBg = "transparent";
                     } else {
-                      statusText = "A VENCER";
-                      statusColor = "#3b82f6"; // blue-500
-                      statusBg = "rgba(59, 130, 246, 0.1)";
+                      const today = startOfDay(new Date());
+                      const dueDate = startOfDay(parsedDueDate);
+                      
+                      if (isToday(dueDate)) {
+                        statusText = "VENCE HOJE";
+                        statusColor = "#eab308"; // yellow-500
+                        statusBg = "rgba(234, 179, 8, 0.1)";
+                      } else if (isBefore(dueDate, today)) {
+                        statusText = "VENCIDA";
+                        statusColor = "var(--expense-color)";
+                        statusBg = "rgba(239, 68, 68, 0.1)";
+                      } else {
+                        statusText = "A VENCER";
+                        statusColor = "#3b82f6"; // blue-500
+                        statusBg = "rgba(59, 130, 246, 0.1)";
+                      }
                     }
                   }
                 }
-              }
 
-              return (
-                <tr key={t.id} style={{ borderBottom: '1px solid var(--border-color)', transition: 'background-color 0.2s', backgroundColor: selectedTx.includes(t.id) ? 'rgba(59, 130, 246, 0.05)' : 'transparent' }}>
-                  <td style={{ padding: '1rem' }}>
-                    {t.type === 'expense' && (
-                      <input type="checkbox" checked={selectedTx.includes(t.id)} onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedTx(prev => [...prev, t.id]);
-                        } else {
-                          setSelectedTx(prev => prev.filter(id => id !== t.id));
-                        }
-                      }} />
-                    )}
-                  </td>
-                  <td style={{ padding: '1rem' }}>
-                    <div className="flex items-center gap-2">
-                      {t.type === 'income' ? (
-                        <ArrowUpCircle size={18} className="text-income" style={{ flexShrink: 0 }} />
-                      ) : (
-                        <ArrowDownCircle size={18} className="text-expense" style={{ flexShrink: 0 }} />
+                return (
+                  <tr key={t.id} style={{ borderBottom: '1px solid var(--border-color)', transition: 'background-color 0.2s', backgroundColor: selectedTx.includes(t.id) ? 'rgba(59, 130, 246, 0.05)' : 'transparent' }}>
+                    <td style={{ padding: '1rem' }}>
+                      {t.type === 'expense' && (
+                        <input type="checkbox" checked={selectedTx.includes(t.id)} onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedTx(prev => [...prev, t.id]);
+                          } else {
+                            setSelectedTx(prev => prev.filter(id => id !== t.id));
+                          }
+                        }} />
                       )}
-                      <div>
-                        <div style={{ fontWeight: '500', textDecoration: isPaid && t.type === 'expense' ? 'line-through' : 'none', opacity: isPaid && t.type === 'expense' ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          {t.description}
-                          {t.hasAttachment && (
-                            <button 
-                              onClick={() => openAttachment(t.attachmentKey)}
-                              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
-                              title="Ver Anexo"
-                            >
-                              <Paperclip size={14} className="text-muted" />
-                            </button>
+                    </td>
+                    <td style={{ padding: '1rem' }}>
+                      <div className="flex items-center gap-2">
+                        {t.type === 'income' ? (
+                          <ArrowUpCircle size={18} className="text-income" style={{ flexShrink: 0 }} />
+                        ) : (
+                          <ArrowDownCircle size={18} className="text-expense" style={{ flexShrink: 0 }} />
+                        )}
+                        <div>
+                          <div style={{ fontWeight: '500', textDecoration: isPaid && t.type === 'expense' ? 'line-through' : 'none', opacity: isPaid && t.type === 'expense' ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            {t.description}
+                            {t.hasAttachment && (
+                              <button 
+                                onClick={() => openAttachment(t.attachmentKey)}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
+                                title="Ver Anexo"
+                              >
+                                <Paperclip size={14} className="text-muted" />
+                              </button>
+                            )}
+                          </div>
+                          {t.details && (
+                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.2rem', fontStyle: 'italic' }}>
+                              {t.details}
+                            </div>
                           )}
                         </div>
-                        {t.details && (
-                          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.2rem', fontStyle: 'italic' }}>
-                            {t.details}
-                          </div>
+                      </div>
+                    </td>
+                    <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>
+                      <div className="flex items-center gap-2">
+                        <Calendar size={14} />
+                        {safeFormatDate(displayDate, "dd/MM")}
+                      </div>
+                    </td>
+                    <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>
+                      {t.type === 'expense' ? (
+                        <div className="flex items-center gap-2" style={{ fontWeight: '500' }}>
+                          {safeFormatDate(t.computedDueDate || displayDate, "dd/MM")}
+                        </div>
+                      ) : '-'}
+                    </td>
+                    <td style={{ padding: '1rem' }}>
+                      {t.type === 'expense' ? (
+                        <span className="badge badge-expense">{t.category}</span>
+                      ) : (
+                        <span className="badge badge-income">{t.source}</span>
+                      )}
+                    </td>
+                    <td style={{ padding: '1rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                      {t.type === 'expense' ? t.paymentMethod : '-'}
+                    </td>
+                    <td style={{ padding: '1rem', textAlign: 'right', fontWeight: '600', color: t.type === 'income' ? 'var(--income-color)' : 'var(--text-main)' }}>
+                      {t.type === 'income' ? '+ ' : '- '}
+                      {formatCurrency(t.amount)}
+                    </td>
+                    <td style={{ padding: '1rem', textAlign: 'center' }}>
+                      {t.type === 'expense' ? (
+                        <button
+                          onClick={() => handleTogglePaid(t)}
+                          style={{
+                            background: statusBg, border: 'none', cursor: 'pointer',
+                            color: statusColor, padding: '0.25rem 0.5rem', borderRadius: '4px',
+                            fontSize: '0.75rem', fontWeight: 'bold', width: '100%'
+                          }}
+                        >
+                          {statusText}
+                        </button>
+                      ) : (
+                        <div style={{
+                          background: statusBg,
+                          color: statusColor, padding: '0.25rem 0.5rem', borderRadius: '4px',
+                          fontSize: '0.75rem', fontWeight: 'bold', textAlign: 'center', width: '100%'
+                        }}>
+                          {statusText}
+                        </div>
+                      )}
+                    </td>
+                    <td style={{ padding: '1rem', textAlign: 'right' }}>
+                      <div className="flex justify-end gap-2">
+                        {(t.isFixedExpense || (!t.isFixed && !t.isFixedExpense)) && (
+                            <button 
+                              onClick={() => onEdit(t)}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
+                              title={t.isFixedExpense ? "Editar neste mês" : "Editar"}
+                            >
+                              <Edit2 size={18} />
+                            </button>
+                        )}
+                        {!t.isFixed && !t.isFixedExpense && (
+                          <>
+                            <button 
+                              onClick={() => {
+                                if(t.groupId) {
+                                  setDeleteConfirmTx(t);
+                                } else {
+                                  deleteTransaction(t.id);
+                                }
+                              }}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
+                              title={t.groupId ? "Opções de Exclusão" : "Excluir"}
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </>
                         )}
                       </div>
-                    </div>
-                  </td>
-                  <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>
-                    <div className="flex items-center gap-2">
-                      <Calendar size={14} />
-                      {safeFormatDate(displayDate, "dd/MM")}
-                    </div>
-                  </td>
-                  <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>
-                    {t.type === 'expense' ? (
-                      <div className="flex items-center gap-2" style={{ fontWeight: '500' }}>
-                        {safeFormatDate(t.computedDueDate || displayDate, "dd/MM")}
-                      </div>
-                    ) : '-'}
-                  </td>
-                  <td style={{ padding: '1rem' }}>
-                    {t.type === 'expense' ? (
-                      <span className="badge badge-expense">{t.category}</span>
-                    ) : (
-                      <span className="badge badge-income">{t.source}</span>
-                    )}
-                  </td>
-                  <td style={{ padding: '1rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                    {t.type === 'expense' ? t.paymentMethod : '-'}
-                  </td>
-                  <td style={{ padding: '1rem', textAlign: 'right', fontWeight: '600', color: t.type === 'income' ? 'var(--income-color)' : 'var(--text-main)' }}>
-                    {t.type === 'income' ? '+ ' : '- '}
-                    {formatCurrency(t.amount)}
-                  </td>
-                  <td style={{ padding: '1rem', textAlign: 'center' }}>
-                    {t.type === 'expense' ? (
-                      <button
-                        onClick={() => handleTogglePaid(t)}
-                        style={{
-                          background: statusBg, border: 'none', cursor: 'pointer',
-                          color: statusColor, padding: '0.25rem 0.5rem', borderRadius: '4px',
-                          fontSize: '0.75rem', fontWeight: 'bold', width: '100%'
-                        }}
-                      >
-                        {statusText}
-                      </button>
-                    ) : (
-                      <div style={{
-                        background: statusBg,
-                        color: statusColor, padding: '0.25rem 0.5rem', borderRadius: '4px',
-                        fontSize: '0.75rem', fontWeight: 'bold', textAlign: 'center', width: '100%'
-                      }}>
-                        {statusText}
-                      </div>
-                    )}
-                  </td>
-                  <td style={{ padding: '1rem', textAlign: 'right' }}>
-                    <div className="flex justify-end gap-2">
-                      {(t.isFixedExpense || (!t.isFixed && !t.isFixedExpense)) && (
-                          <button 
-                            onClick={() => onEdit(t)}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
-                            title={t.isFixedExpense ? "Editar neste mês" : "Editar"}
-                          >
-                            <Edit2 size={18} />
-                          </button>
-                      )}
-                      {!t.isFixed && !t.isFixedExpense && (
-                        <>
-                          <button 
-                            onClick={() => {
-                              if(t.groupId) {
-                                setDeleteConfirmTx(t);
-                              } else {
-                                deleteTransaction(t.id);
-                              }
-                            }}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
-                            title={t.groupId ? "Opções de Exclusão" : "Excluir"}
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </>
-                      )}
+                    </td>
+                  </tr>
+                );
+              };
+              return renderTransactionRow(t);
+            })}
+            
+            {processedTransactions.some(t => t.isFixedExpense) && (
+              <>
+                <tr 
+                  onClick={() => setIsFixedExpanded(!isFixedExpanded)}
+                  style={{ cursor: 'pointer', backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-color)', borderTop: '2px solid var(--border-color)' }}
+                >
+                  <td colSpan="9" style={{ padding: '1rem', textAlign: 'center', fontWeight: '600', color: 'var(--text-main)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                      Despesas Fixas {isFixedExpanded ? <ArrowUp size={16} /> : <ArrowDown size={16} />}
                     </div>
                   </td>
                 </tr>
-              );
-            })}
+                {isFixedExpanded && processedTransactions.filter(t => t.isFixedExpense).map((t) => {
+                  const displayDate = t.date || t.originalDate;
+                  const isPaid = t.isPaid;
+                  const effMonth = t.overrideMonth || currentMonth;
+                  
+                  let statusText = "";
+                  let statusColor = "";
+                  let statusBg = "";
+                  
+                  if (t.type === 'income') {
+                    statusText = "PAGA";
+                    statusColor = "var(--income-color)";
+                    statusBg = "rgba(16, 185, 129, 0.1)";
+                  } else {
+                    if (isPaid) {
+                      statusText = "PAGA";
+                      statusColor = "var(--income-color)";
+                      statusBg = "rgba(16, 185, 129, 0.1)";
+                    } else {
+                      const parsedDueDate = parseISO(t.computedDueDate || displayDate);
+                      if (isNaN(parsedDueDate.getTime())) {
+                        statusText = "DATA INVÁLIDA";
+                        statusColor = "var(--text-muted)";
+                        statusBg = "transparent";
+                      } else {
+                        const today = startOfDay(new Date());
+                        const dueDate = startOfDay(parsedDueDate);
+                        
+                        if (isToday(dueDate)) {
+                          statusText = "VENCE HOJE";
+                          statusColor = "#eab308";
+                          statusBg = "rgba(234, 179, 8, 0.1)";
+                        } else if (isBefore(dueDate, today)) {
+                          statusText = "VENCIDA";
+                          statusColor = "var(--expense-color)";
+                          statusBg = "rgba(239, 68, 68, 0.1)";
+                        } else {
+                          statusText = "A VENCER";
+                          statusColor = "#3b82f6";
+                          statusBg = "rgba(59, 130, 246, 0.1)";
+                        }
+                      }
+                    }
+                  }
+
+                  return (
+                    <tr key={t.id} style={{ borderBottom: '1px solid var(--border-color)', transition: 'background-color 0.2s', backgroundColor: selectedTx.includes(t.id) ? 'rgba(59, 130, 246, 0.05)' : 'transparent' }}>
+                      <td style={{ padding: '1rem' }}>
+                        {t.type === 'expense' && (
+                          <input type="checkbox" checked={selectedTx.includes(t.id)} onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedTx(prev => [...prev, t.id]);
+                            } else {
+                              setSelectedTx(prev => prev.filter(id => id !== t.id));
+                            }
+                          }} />
+                        )}
+                      </td>
+                      <td style={{ padding: '1rem' }}>
+                        <div className="flex items-center gap-2">
+                          {t.type === 'income' ? (
+                            <ArrowUpCircle size={18} className="text-income" style={{ flexShrink: 0 }} />
+                          ) : (
+                            <ArrowDownCircle size={18} className="text-expense" style={{ flexShrink: 0 }} />
+                          )}
+                          <div>
+                            <div style={{ fontWeight: '500', textDecoration: isPaid && t.type === 'expense' ? 'line-through' : 'none', opacity: isPaid && t.type === 'expense' ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              {t.description}
+                              {t.hasAttachment && (
+                                <button 
+                                  onClick={() => openAttachment(t.attachmentKey)}
+                                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
+                                  title="Ver Anexo"
+                                >
+                                  <Paperclip size={14} className="text-muted" />
+                                </button>
+                              )}
+                            </div>
+                            {t.details && (
+                              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.2rem', fontStyle: 'italic' }}>
+                                {t.details}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>
+                        <div className="flex items-center gap-2">
+                          <Calendar size={14} />
+                          {safeFormatDate(displayDate, "dd/MM")}
+                        </div>
+                      </td>
+                      <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>
+                        {t.type === 'expense' ? (
+                          <div className="flex items-center gap-2" style={{ fontWeight: '500' }}>
+                            {safeFormatDate(t.computedDueDate || displayDate, "dd/MM")}
+                          </div>
+                        ) : '-'}
+                      </td>
+                      <td style={{ padding: '1rem' }}>
+                        {t.type === 'expense' ? (
+                          <span className="badge badge-expense">{t.category}</span>
+                        ) : (
+                          <span className="badge badge-income">{t.source}</span>
+                        )}
+                      </td>
+                      <td style={{ padding: '1rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                        {t.type === 'expense' ? t.paymentMethod : '-'}
+                      </td>
+                      <td style={{ padding: '1rem', textAlign: 'right', fontWeight: '600', color: t.type === 'income' ? 'var(--income-color)' : 'var(--text-main)' }}>
+                        {t.type === 'income' ? '+ ' : '- '}
+                        {formatCurrency(t.amount)}
+                      </td>
+                      <td style={{ padding: '1rem', textAlign: 'center' }}>
+                        {t.type === 'expense' ? (
+                          <button
+                            onClick={() => handleTogglePaid(t)}
+                            style={{
+                              background: statusBg, border: 'none', cursor: 'pointer',
+                              color: statusColor, padding: '0.25rem 0.5rem', borderRadius: '4px',
+                              fontSize: '0.75rem', fontWeight: 'bold', width: '100%'
+                            }}
+                          >
+                            {statusText}
+                          </button>
+                        ) : (
+                          <div style={{
+                            background: statusBg,
+                            color: statusColor, padding: '0.25rem 0.5rem', borderRadius: '4px',
+                            fontSize: '0.75rem', fontWeight: 'bold', textAlign: 'center', width: '100%'
+                          }}>
+                            {statusText}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ padding: '1rem', textAlign: 'right' }}>
+                        <div className="flex justify-end gap-2">
+                          {(t.isFixedExpense || (!t.isFixed && !t.isFixedExpense)) && (
+                              <button 
+                                onClick={() => onEdit(t)}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
+                                title={t.isFixedExpense ? "Editar neste mês" : "Editar"}
+                              >
+                                <Edit2 size={18} />
+                              </button>
+                          )}
+                          {!t.isFixed && !t.isFixedExpense && (
+                            <>
+                              <button 
+                                onClick={() => {
+                                  if(t.groupId) {
+                                    setDeleteConfirmTx(t);
+                                  } else {
+                                    deleteTransaction(t.id);
+                                  }
+                                }}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
+                                title={t.groupId ? "Opções de Exclusão" : "Excluir"}
+                              >
+                                <Trash2 size={18} />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </>
+            )}
           </tbody>
         </table>
       </div>
@@ -455,3 +642,4 @@ const safeFormatDate = (dateString, formatStr) => {
 };
 
 export default TransactionList;
+
