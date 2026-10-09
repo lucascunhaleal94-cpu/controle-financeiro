@@ -45,8 +45,22 @@ const safeFormatDate = (dateString, formatStr) => {
     dueDate: '',
     category: '',
     paymentMethod: '',
-    amount: ''
+    amount: '',
+    status: ''
   });
+
+  const getTransactionStatusText = (t) => {
+    if (t.type === 'income') return "PAGA";
+    if (t.isPaid) return "PAGA";
+    const displayDate = t.date || t.originalDate;
+    const parsedDueDate = parseISO(t.computedDueDate || displayDate);
+    if (isNaN(parsedDueDate.getTime())) return "DATA INVÁLIDA";
+    const today = startOfDay(new Date());
+    const dueDate = startOfDay(parsedDueDate);
+    if (isToday(dueDate)) return "VENCE HOJE";
+    if (isBefore(dueDate, today)) return "VENCIDA";
+    return "A VENCER";
+  };
 
   const processedTransactions = useMemo(() => {
     let result = [...currentMonthTransactions];
@@ -78,6 +92,10 @@ const safeFormatDate = (dateString, formatStr) => {
       });
     }
 
+    if (filters.status) {
+      result = result.filter(t => getTransactionStatusText(t).toLowerCase().includes(filters.status.toLowerCase()));
+    }
+
     if (sortConfig) {
       result.sort((a, b) => {
         if (sortConfig.key === 'date') {
@@ -105,6 +123,9 @@ const safeFormatDate = (dateString, formatStr) => {
         } else if (sortConfig.key === 'paymentMethod') {
           valA = (a.paymentMethod || '').toLowerCase(); 
           valB = (b.paymentMethod || '').toLowerCase();
+        } else if (sortConfig.key === 'status') {
+          valA = getTransactionStatusText(a).toLowerCase();
+          valB = getTransactionStatusText(b).toLowerCase();
         }
 
         if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
@@ -253,7 +274,16 @@ const safeFormatDate = (dateString, formatStr) => {
                   style={{ width: '100%', marginTop: '0.5rem', padding: '0.2rem 0.5rem', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'transparent', color: 'inherit', textAlign: 'right' }}
                 />
               </th>
-              <th style={{ padding: '1rem', width: '100px', textAlign: 'center', verticalAlign: 'top' }}>Status</th>
+                            <th style={{ padding: '1rem', fontWeight: '500', width: '120px' }}>
+                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }} onClick={() => handleSort('status')}>
+                  Status <SortIcon columnKey="status" />
+                </div>
+                <input 
+                  type="text" placeholder="Filtrar..." value={filters.status} 
+                  onChange={(e) => handleFilterChange('status', e.target.value)}
+                  style={{ width: '100%', marginTop: '0.5rem', padding: '0.2rem 0.5rem', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'transparent', color: 'inherit', textAlign: 'center' }}
+                />
+              </th>
               <th style={{ padding: '1rem', width: '80px', textAlign: 'right', verticalAlign: 'top' }}>Ações</th>
             </tr>
           </thead>
@@ -642,4 +672,5 @@ const safeFormatDate = (dateString, formatStr) => {
 };
 
 export default TransactionList;
+
 
