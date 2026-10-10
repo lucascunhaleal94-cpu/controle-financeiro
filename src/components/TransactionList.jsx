@@ -346,60 +346,60 @@ const safeFormatDate = (dateString, formatStr) => {
                 <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }} onClick={() => handleSort('description')}>
                   Descrição <SortIcon columnKey="description" />
                 </div>
-                <input 
-                  type="text" placeholder="Filtrar..." value={filters.description} 
-                  onChange={(e) => handleFilterChange('description', e.target.value)}
-                  style={{ width: '100%', marginTop: '0.5rem', padding: '0.2rem 0.5rem', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'transparent', color: 'inherit' }}
+                <MultiSelectFilter 
+                  options={uniqueValues.description} 
+                  selected={filters.description} 
+                  onChange={(val) => handleFilterChange('description', val)} 
                 />
               </th>
               <th style={{ padding: '1rem', fontWeight: '500' }}>
                 <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }} onClick={() => handleSort('date')}>
                   Data <SortIcon columnKey="date" />
                 </div>
-                <input 
-                  type="text" placeholder="Filtrar..." value={filters.date} 
-                  onChange={(e) => handleFilterChange('date', e.target.value)}
-                  style={{ width: '100%', marginTop: '0.5rem', padding: '0.2rem 0.5rem', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'transparent', color: 'inherit' }}
+                <MultiSelectFilter 
+                  options={uniqueValues.date} 
+                  selected={filters.date} 
+                  onChange={(val) => handleFilterChange('date', val)} 
                 />
               </th>
               <th style={{ padding: '1rem', fontWeight: '500' }}>
                 <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }} onClick={() => handleSort('dueDate')}>
                   Vencimento <SortIcon columnKey="dueDate" />
                 </div>
-                <input 
-                  type="text" placeholder="Filtrar..." value={filters.dueDate} 
-                  onChange={(e) => handleFilterChange('dueDate', e.target.value)}
-                  style={{ width: '100%', marginTop: '0.5rem', padding: '0.2rem 0.5rem', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'transparent', color: 'inherit' }}
+                <MultiSelectFilter 
+                  options={uniqueValues.dueDate} 
+                  selected={filters.dueDate} 
+                  onChange={(val) => handleFilterChange('dueDate', val)} 
                 />
               </th>
               <th style={{ padding: '1rem', fontWeight: '500' }}>
                 <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }} onClick={() => handleSort('category')}>
                   Categoria/Fonte <SortIcon columnKey="category" />
                 </div>
-                <input 
-                  type="text" placeholder="Filtrar..." value={filters.category} 
-                  onChange={(e) => handleFilterChange('category', e.target.value)}
-                  style={{ width: '100%', marginTop: '0.5rem', padding: '0.2rem 0.5rem', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'transparent', color: 'inherit' }}
+                <MultiSelectFilter 
+                  options={uniqueValues.category} 
+                  selected={filters.category} 
+                  onChange={(val) => handleFilterChange('category', val)} 
                 />
               </th>
               <th style={{ padding: '1rem', fontWeight: '500' }}>
                 <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }} onClick={() => handleSort('paymentMethod')}>
                   Pagamento <SortIcon columnKey="paymentMethod" />
                 </div>
-                <input 
-                  type="text" placeholder="Filtrar..." value={filters.paymentMethod} 
-                  onChange={(e) => handleFilterChange('paymentMethod', e.target.value)}
-                  style={{ width: '100%', marginTop: '0.5rem', padding: '0.2rem 0.5rem', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'transparent', color: 'inherit' }}
+                <MultiSelectFilter 
+                  options={uniqueValues.paymentMethod} 
+                  selected={filters.paymentMethod} 
+                  onChange={(val) => handleFilterChange('paymentMethod', val)} 
                 />
               </th>
               <th style={{ padding: '1rem', fontWeight: '500', textAlign: 'right' }}>
                 <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.5rem' }} onClick={() => handleSort('amount')}>
                   <SortIcon columnKey="amount" /> Valor
                 </div>
-                <input 
-                  type="text" placeholder="Filtrar..." value={filters.amount} 
-                  onChange={(e) => handleFilterChange('amount', e.target.value)}
-                  style={{ width: '100%', marginTop: '0.5rem', padding: '0.2rem 0.5rem', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'transparent', color: 'inherit', textAlign: 'right' }}
+                <MultiSelectFilter 
+                  options={uniqueValues.amount} 
+                  selected={filters.amount} 
+                  onChange={(val) => handleFilterChange('amount', val)} 
                 />
               </th>
                             <th style={{ padding: '1rem', fontWeight: '500', width: '120px' }}>
