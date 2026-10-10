@@ -319,7 +319,6 @@ const safeFormatDate = (dateString, formatStr) => {
   };
 
   const filteredSubtotal = processedTransactions.reduce((acc, t) => {
-    if (t.isFixedExpense) return acc;
     return t.type === 'income' ? acc + t.amount : acc - t.amount;
   }, 0);
 
