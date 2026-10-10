@@ -65,7 +65,17 @@ const SupabaseSync = ({ currentUser, children }) => {
           const localPaidItems = {};
           if (dbPaidItems) {
              dbPaidItems.forEach(pi => {
-               localPaidItems[pi.item_id] = pi.is_paid;
+               if (pi.item_id && pi.item_id.includes(':::')) {
+                 const [month, id] = pi.item_id.split(':::');
+                 if (!localPaidItems[month]) localPaidItems[month] = {};
+                 localPaidItems[month][id] = pi.is_paid;
+               } else if (pi.item_id && pi.month) {
+                 // fallback if there's a month column we didn't know about
+                 if (!localPaidItems[pi.month]) localPaidItems[pi.month] = {};
+                 localPaidItems[pi.month][pi.item_id] = pi.is_paid;
+               } else {
+                 localPaidItems[pi.item_id] = pi.is_paid; // legacy
+               }
              });
           }
 
@@ -109,7 +119,12 @@ const SupabaseSync = ({ currentUser, children }) => {
                const { error: stgErr } = await supabase.from('user_settings').upsert({ user_id: currentUser.id, settings: context.settings });
                if (stgErr) throw new Error('Settings: ' + stgErr.message);
                
-               const piToPush = Object.entries(context.paidItems || {}).map(([key, val]) => ({ user_id: currentUser.id, item_id: key, is_paid: val }));
+               const piToPush = [];
+                Object.entries(context.paidItems || {}).forEach(([month, items]) => {
+                  Object.entries(items).forEach(([id, isPaid]) => {
+                    piToPush.push({ user_id: currentUser.id, item_id: `${month}:::${id}`, is_paid: isPaid });
+                  });
+                });
                if (piToPush.length > 0) {
                  const { error: piErr } = await supabase.from('paid_items').upsert(piToPush);
                  if (piErr) throw new Error('Paid Items: ' + piErr.message);
@@ -155,7 +170,12 @@ const SupabaseSync = ({ currentUser, children }) => {
           await supabase.from('user_settings').upsert({ user_id: currentUser.id, settings: context.settings });
         }
         if (context.paidItems) {
-           const piToPush = Object.entries(context.paidItems || {}).map(([key, val]) => ({ user_id: currentUser.id, item_id: key, is_paid: val }));
+           const piToPush = [];
+           Object.entries(context.paidItems || {}).forEach(([month, items]) => {
+              Object.entries(items).forEach(([id, isPaid]) => {
+                 piToPush.push({ user_id: currentUser.id, item_id: `${month}:::${id}`, is_paid: isPaid });
+              });
+           });
            if (piToPush.length > 0) await supabase.from('paid_items').upsert(piToPush);
         }
       } catch (err) {
