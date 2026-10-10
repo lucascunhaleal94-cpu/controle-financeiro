@@ -318,10 +318,22 @@ const safeFormatDate = (dateString, formatStr) => {
     }
   };
 
+  const filteredSubtotal = processedTransactions.reduce((acc, t) => {
+    if (t.isFixedExpense) return acc;
+    return t.type === 'income' ? acc + t.amount : acc - t.amount;
+  }, 0);
+
+  const subtotalColor = filteredSubtotal >= 0 ? 'var(--income-color)' : 'var(--danger-color)';
+
   return (
     <div className="card" style={{ marginTop: '2rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <h2 style={{ margin: 0 }}>Lançamentos do Mês</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          <h2 style={{ margin: 0 }}>Lançamentos do Mês</h2>
+          <span style={{ padding: '0.4rem 0.8rem', borderRadius: '4px', backgroundColor: 'var(--bg-main)', border: '1px solid var(--border-color)', fontWeight: '600', color: subtotalColor, fontSize: '0.9rem' }}>
+            Subtotal: {formatCurrency(filteredSubtotal)}
+          </span>
+        </div>
         {selectedTx.length > 0 && (
           <button onClick={handleBulkPay} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem', fontSize: '0.9rem' }}>
             <CheckCircle2 size={16} /> Pagar Selecionados ({selectedTx.length})
