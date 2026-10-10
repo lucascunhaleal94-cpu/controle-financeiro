@@ -70,17 +70,19 @@ const CategoryManagerModal = ({ onClose }) => {
       backgroundColor: 'rgba(15, 23, 42, 0.8)',
       backdropFilter: 'blur(4px)',
       display: 'flex',
-      alignItems: 'center',
+      alignItems: 'flex-start',
       justifyContent: 'center',
       zIndex: 50,
-      padding: '1rem'
+      padding: '1rem',
+      overflowY: 'auto'
     }}>
       <div className="card glass-panel animate-fade-in" style={{ 
         width: '100%', 
         maxWidth: '600px',
         maxHeight: '90vh',
         overflowY: 'auto',
-        position: 'relative'
+        position: 'relative',
+        margin: 'auto'
       }}>
         <button 
           onClick={onClose}
