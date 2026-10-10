@@ -133,7 +133,7 @@ const safeFormatDate = (dateString, formatStr) => {
   const [filters, setFilters] = useState({
     description: [],
     date: [],
-    duedate: [],
+    dueDate: [],
     category: [],
     paymentMethod: [],
     amount: [],
@@ -208,14 +208,14 @@ const safeFormatDate = (dateString, formatStr) => {
     if (filters.date.length > 0) {
       result = result.filter(t => {
         const displayDate = t.date || t.originalDate;
-        const formatted = safeFormatDate(displayDate, "dd 'de' MMM").toLowerCase();
+        const formatted = safeFormatDate(displayDate, "dd 'de' MMM");
         return filters.date.includes(formatted);
       });
     }
     if (filters.dueDate.length > 0) {
       result = result.filter(t => {
         if (!t.computedDueDate) return false;
-        const formatted = safeFormatDate(t.computedDueDate, "dd 'de' MMM").toLowerCase();
+        const formatted = safeFormatDate(t.computedDueDate, "dd 'de' MMM");
         return filters.dueDate.includes(formatted);
       });
     }
