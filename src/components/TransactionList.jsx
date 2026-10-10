@@ -8,6 +8,97 @@ const formatCurrency = (value) => {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 };
 
+
+const MultiSelectFilter = ({ options, selected, onChange, placeholder = "Filtrar..." }) => {
+  const [isOpen, setIsOpen] = React.useState(false);
+  const [searchTerm, setSearchTerm] = React.useState('');
+
+  const filteredOptions = options.filter(opt => opt.toLowerCase().includes(searchTerm.toLowerCase()));
+
+  return (
+    <div style={{ position: 'relative', marginTop: '0.5rem', width: '100%' }}>
+      <div 
+        onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }}
+        style={{ 
+          width: '100%', padding: '0.2rem 0.5rem', fontSize: '0.8rem', borderRadius: '4px', 
+          border: '1px solid var(--border-color)', background: 'transparent', color: 'inherit',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer',
+          minHeight: '26px'
+        }}
+      >
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {selected.length === 0 ? placeholder : selected.length + ' sel.'}
+        </span>
+        <span style={{ fontSize: '0.6rem', marginLeft: '4px' }}>▼</span>
+      </div>
+      
+      {isOpen && (
+        <>
+          <div 
+            style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 40 }} 
+            onClick={(e) => { e.stopPropagation(); setIsOpen(false); }} 
+          />
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            style={{ 
+              position: 'absolute', top: '100%', left: 0, zIndex: 50, 
+              background: 'var(--bg-card)', border: '1px solid var(--border-color)', 
+              borderRadius: '4px', marginTop: '4px', width: 'max-content', minWidth: '100%', maxWidth: '250px',
+              boxShadow: '0 4px 6px rgba(0,0,0,0.3)', padding: '0.5rem',
+              maxHeight: '250px', display: 'flex', flexDirection: 'column'
+            }}
+          >
+            <div style={{ marginBottom: '0.5rem' }}>
+              <input 
+                type="text" 
+                placeholder="Buscar..." 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={{ width: '100%', padding: '0.2rem', fontSize: '0.8rem', borderRadius: '2px', border: '1px solid var(--border-color)', background: 'var(--bg-main)', color: 'var(--text-main)' }}
+              />
+            </div>
+            <div style={{ overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              {filteredOptions.length === 0 ? (
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Nenhum encontrado</span>
+              ) : (
+                <>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap', borderBottom: '1px solid var(--border-color)', paddingBottom: '4px', marginBottom: '4px' }}>
+                    <input 
+                      type="checkbox"
+                      checked={selected.length === options.length && options.length > 0}
+                      onChange={(e) => {
+                        if (e.target.checked) onChange([...options]);
+                        else onChange([]);
+                      }}
+                    />
+                    (Selecionar todos)
+                  </label>
+                  {filteredOptions.map(opt => (
+                    <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={selected.includes(opt)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            onChange([...selected, opt]);
+                          } else {
+                            onChange(selected.filter(x => x !== opt));
+                          }
+                        }}
+                      />
+                      {opt}
+                    </label>
+                  ))}
+                </>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
 const TransactionList = ({ onEdit }) => {
 
 const safeFormatDate = (dateString, formatStr) => {
@@ -40,13 +131,13 @@ const safeFormatDate = (dateString, formatStr) => {
   const [selectedTx, setSelectedTx] = useState([]);
   const [isFixedExpanded, setIsFixedExpanded] = useState(false);
   const [filters, setFilters] = useState({
-    description: '',
-    date: '',
-    dueDate: '',
-    category: '',
-    paymentMethod: '',
-    amount: '',
-    status: ''
+    description: [],
+    date: [],
+    duedate: [],
+    category: [],
+    paymentMethod: [],
+    amount: [],
+    status: []
   });
 
   const getTransactionStatusText = (t) => {
@@ -62,38 +153,75 @@ const safeFormatDate = (dateString, formatStr) => {
     return "A VENCER";
   };
 
+  const uniqueValues = useMemo(() => {
+    const vals = {
+      description: new Set(),
+      date: new Set(),
+      dueDate: new Set(),
+      category: new Set(),
+      paymentMethod: new Set(),
+      amount: new Set(),
+      status: new Set()
+    };
+    
+    currentMonthTransactions.forEach(t => {
+      if (t.description) vals.description.add(t.description);
+      const dDate = safeFormatDate(t.date || t.originalDate, "dd 'de' MMM");
+      if (dDate !== '-') vals.date.add(dDate);
+      if (t.computedDueDate) {
+        const dDue = safeFormatDate(t.computedDueDate, "dd 'de' MMM");
+        if (dDue !== '-') vals.dueDate.add(dDue);
+      }
+      const cat = t.category || t.source || '';
+      if (cat) vals.category.add(cat);
+      if (t.paymentMethod) vals.paymentMethod.add(t.paymentMethod);
+      if (t.amount != null) vals.amount.add(formatCurrency(t.amount));
+      vals.status.add(getTransactionStatusText(t));
+    });
+
+    return {
+      description: Array.from(vals.description).sort(),
+      date: Array.from(vals.date).sort(),
+      dueDate: Array.from(vals.dueDate).sort(),
+      category: Array.from(vals.category).sort(),
+      paymentMethod: Array.from(vals.paymentMethod).sort(),
+      amount: Array.from(vals.amount).sort(),
+      status: Array.from(vals.status).sort()
+    };
+  }, [currentMonthTransactions]);
+
   const processedTransactions = useMemo(() => {
     let result = [...currentMonthTransactions];
 
-    if (filters.description) {
-      result = result.filter(t => t.description.toLowerCase().includes(filters.description.toLowerCase()));
+    if (filters.description.length > 0) {
+      result = result.filter(t => filters.description.includes(t.description));
     }
-    if (filters.category) {
-      result = result.filter(t => (t.category || t.source || '').toLowerCase().includes(filters.category.toLowerCase()));
+    if (filters.category.length > 0) {
+      result = result.filter(t => filters.category.includes(t.category || t.source || ''));
     }
-    if (filters.paymentMethod) {
-      result = result.filter(t => (t.paymentMethod || '').toLowerCase().includes(filters.paymentMethod.toLowerCase()));
+    if (filters.paymentMethod.length > 0) {
+      result = result.filter(t => filters.paymentMethod.includes(t.paymentMethod || ''));
     }
-    if (filters.amount) {
-      result = result.filter(t => String(t.amount).includes(filters.amount));
+    if (filters.amount.length > 0) {
+      result = result.filter(t => filters.amount.includes(formatCurrency(t.amount)));
     }
-    if (filters.date) {
+    if (filters.date.length > 0) {
       result = result.filter(t => {
         const displayDate = t.date || t.originalDate;
         const formatted = safeFormatDate(displayDate, "dd 'de' MMM").toLowerCase();
-        return formatted.includes(filters.date.toLowerCase());
+        return filters.date.includes(formatted);
       });
     }
-    if (filters.dueDate) {
+    if (filters.dueDate.length > 0) {
       result = result.filter(t => {
         if (!t.computedDueDate) return false;
         const formatted = safeFormatDate(t.computedDueDate, "dd 'de' MMM").toLowerCase();
-        return formatted.includes(filters.dueDate.toLowerCase());
+        return filters.dueDate.includes(formatted);
       });
     }
 
-    if (filters.status) {
-      result = result.filter(t => getTransactionStatusText(t).toLowerCase().includes(filters.status.toLowerCase()));
+    if (filters.status.length > 0) {
+      result = result.filter(t => filters.status.includes(getTransactionStatusText(t)));
     }
 
     if (sortConfig) {
@@ -278,10 +406,10 @@ const safeFormatDate = (dateString, formatStr) => {
                 <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }} onClick={() => handleSort('status')}>
                   Status <SortIcon columnKey="status" />
                 </div>
-                <input 
-                  type="text" placeholder="Filtrar..." value={filters.status} 
-                  onChange={(e) => handleFilterChange('status', e.target.value)}
-                  style={{ width: '100%', marginTop: '0.5rem', padding: '0.2rem 0.5rem', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'transparent', color: 'inherit', textAlign: 'center' }}
+                <MultiSelectFilter 
+                  options={uniqueValues.status} 
+                  selected={filters.status} 
+                  onChange={(val) => handleFilterChange('status', val)} 
                 />
               </th>
               <th style={{ padding: '1rem', width: '80px', textAlign: 'right', verticalAlign: 'top' }}>Ações</th>
