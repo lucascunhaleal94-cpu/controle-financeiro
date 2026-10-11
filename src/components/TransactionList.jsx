@@ -115,7 +115,8 @@ const safeFormatDate = (dateString, formatStr) => {
     currentMonth, 
     paidItems, 
     togglePaidStatus,
-    openAttachment
+    openAttachment,
+    getEffectiveMonth
   } = useTransactions();
 
   if (currentMonthTransactions.length === 0) {
@@ -291,7 +292,7 @@ const safeFormatDate = (dateString, formatStr) => {
     selectedTx.forEach(txId => {
       const t = currentMonthTransactions.find(x => x.id === txId);
       if (t && !t.isPaid) {
-        const effMonth = t.overrideMonth || currentMonth;
+        const effMonth = t.overrideMonth || (getEffectiveMonth ? getEffectiveMonth(t) : currentMonth);
         if (t.isFixedExpense) {
           togglePaidStatus(effMonth, t.baseId);
         } else {
@@ -303,7 +304,7 @@ const safeFormatDate = (dateString, formatStr) => {
   };
 
   const handleTogglePaid = (t) => {
-    const effMonth = t.overrideMonth || currentMonth;
+    const effMonth = t.overrideMonth || (getEffectiveMonth ? getEffectiveMonth(t) : currentMonth);
     if (t.isFixedExpense) {
       togglePaidStatus(effMonth, t.baseId);
     } else {

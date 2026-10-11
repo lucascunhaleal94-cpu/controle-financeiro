@@ -1080,6 +1080,7 @@ export const TransactionsProvider = ({ children, currentUser }) => {
         editFixedExpense,
         updateFixedExpenseOverride,
         paidItems,
+        setPaidItems,
         togglePaidStatus,
         getEffectiveMonth,
         openAttachment,

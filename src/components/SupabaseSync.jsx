@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { useTransactions } from '../context/TransactionsContext';
 
@@ -6,6 +6,10 @@ const SupabaseSync = ({ currentUser, children }) => {
   const context = useTransactions();
   const [isSynced, setIsSynced] = useState(false);
   const [syncError, setSyncError] = useState(null);
+  const contextRef = useRef(context);
+  contextRef.current = context;
+
+  const getStorageKey = (key) => `@ControleFinanceiro_${currentUser.id}:${key}`;
 
   // Helper para mapear camelCase para snake_case
   const mapToDB = (tx) => ({
@@ -59,44 +63,85 @@ const SupabaseSync = ({ currentUser, children }) => {
         const forceUpload = sessionStorage.getItem('force_cloud_upload') === 'true';
 
         if (hasCloudData && !forceUpload) {
-          // Substituir contexto local pelos dados da nuvem
+          // Substituir transações locais pelas da nuvem
           const localTransactions = dbTransactions.map(mapToLocal);
           
-          const localPaidItems = {};
-          if (dbPaidItems) {
-             dbPaidItems.forEach(pi => {
-               if (pi.item_id && pi.item_id.includes(':::')) {
-                 const [month, id] = pi.item_id.split(':::');
-                 if (!localPaidItems[month]) localPaidItems[month] = {};
-                 localPaidItems[month][id] = pi.is_paid;
-               } else if (pi.item_id && pi.month) {
-                 // fallback if there's a month column we didn't know about
-                 if (!localPaidItems[pi.month]) localPaidItems[pi.month] = {};
-                 localPaidItems[pi.month][pi.item_id] = pi.is_paid;
-               } else {
-                 localPaidItems[pi.item_id] = pi.is_paid; // legacy
-               }
-             });
+          // Recuperar paidItems da nuvem:
+          // 1º Prioridade: dbSettings.settings.paidItems (formato JSON seguro que suporta qualquer estrutura e mês)
+          let cloudPaidItems = {};
+          if (dbSettings?.settings?.paidItems && typeof dbSettings.settings.paidItems === 'object') {
+            cloudPaidItems = { ...dbSettings.settings.paidItems };
           }
 
-          const getStorageKey = (key) => `@ControleFinanceiro_${currentUser.id}:${key}`;
-          
+          // 2º Mesclar com registros legados de dbPaidItems (caso existam)
+          if (dbPaidItems && Array.isArray(dbPaidItems) && dbPaidItems.length > 0) {
+            dbPaidItems.forEach(pi => {
+              if (pi.item_id && pi.item_id.includes(':::')) {
+                const [month, id] = pi.item_id.split(':::');
+                if (!cloudPaidItems[month]) cloudPaidItems[month] = {};
+                cloudPaidItems[month][id] = pi.is_paid;
+              } else if (pi.item_id && pi.month) {
+                if (!cloudPaidItems[pi.month]) cloudPaidItems[pi.month] = {};
+                cloudPaidItems[pi.month][pi.item_id] = pi.is_paid;
+              }
+            });
+          }
+
+          // 3º Ler o que está gravado localmente no localStorage
+          let savedLocalPaid = {};
+          try {
+            const raw = localStorage.getItem(getStorageKey('paidItems'));
+            if (raw) savedLocalPaid = JSON.parse(raw);
+          } catch (e) {
+            console.error('Erro ao ler paidItems local:', e);
+          }
+
+          // 4º Fazer merge inteligente:
+          // Começa com o que o usuário marcou localmente (para nunca perder cliques recentes / offline)
+          // E complementa com os dados da nuvem
+          const finalPaidItems = { ...savedLocalPaid };
+          Object.entries(cloudPaidItems).forEach(([month, items]) => {
+            if (items && typeof items === 'object') {
+              finalPaidItems[month] = {
+                ...(finalPaidItems[month] || {}),
+                ...items
+              };
+            }
+          });
+
           // Atualiza localStorage
           localStorage.setItem(getStorageKey('transactions'), JSON.stringify(localTransactions));
-          if (dbSettings?.settings) localStorage.setItem(getStorageKey('settings'), JSON.stringify(dbSettings.settings));
-          localStorage.setItem(getStorageKey('paidItems'), JSON.stringify(localPaidItems));
+          
+          const rawSettings = dbSettings?.settings || {};
+          const { paidItems: _unused, ...cleanSettings } = rawSettings;
+          if (Object.keys(cleanSettings).length > 0) {
+            localStorage.setItem(getStorageKey('settings'), JSON.stringify(cleanSettings));
+          }
+          
+          localStorage.setItem(getStorageKey('paidItems'), JSON.stringify(finalPaidItems));
           
           if (dbCategories && dbCategories.length > 0) {
-             const cats = dbCategories.map(c => ({ name: c.name, limit: Number(c.color || 0) })); // Reusing color field for limit as simple workaround, or mapping to original
-             localStorage.setItem(getStorageKey('categories'), JSON.stringify(cats));
+            const cats = dbCategories.map(c => ({ name: c.name, limit: Number(c.color || 0) }));
+            localStorage.setItem(getStorageKey('categories'), JSON.stringify(cats));
           }
           if (dbPaymentMethods && dbPaymentMethods.length > 0) {
-             const methods = dbPaymentMethods.map(m => m.name);
-             localStorage.setItem(getStorageKey('paymentMethods'), JSON.stringify(methods));
+            const methods = dbPaymentMethods.map(m => m.name);
+            localStorage.setItem(getStorageKey('paymentMethods'), JSON.stringify(methods));
           }
 
-          // A página precisará recarregar para pegar os dados corretos no Contexto
-          // Ou podemos simplesmente usar window.location.reload()
+          // Se o que temos localmente tiver dados adicionais não salvos na nuvem, atualiza a nuvem agora
+          if (JSON.stringify(cloudPaidItems) !== JSON.stringify(finalPaidItems)) {
+            const updatedSettings = {
+              ...(cleanSettings || contextRef.current?.settings || {}),
+              paidItems: finalPaidItems
+            };
+            await supabase.from('user_settings').upsert({ user_id: currentUser.id, settings: updatedSettings });
+          }
+
+          if (contextRef.current?.setPaidItems) {
+            contextRef.current.setPaidItems(finalPaidItems);
+          }
+
           const wasSynced = sessionStorage.getItem('has_synced_cloud');
           if (!wasSynced) {
             sessionStorage.setItem('has_synced_cloud', 'true');
@@ -104,92 +149,92 @@ const SupabaseSync = ({ currentUser, children }) => {
             return;
           }
         } else {
-           // Não há dados na nuvem, ou forçamos o upload (Migração ou Importação)
-           if (context.transactions && context.transactions.length > 0) {
-             console.log('Enviando dados locais para a nuvem...');
-             
-             try {
-               if (forceUpload) {
-                 await supabase.from('transactions').delete().eq('user_id', currentUser.id);
-               }
+          // Não há dados na nuvem, ou forçamos o upload (Migração ou Importação)
+          const currentCtx = contextRef.current;
+          if (currentCtx?.transactions && currentCtx.transactions.length > 0) {
+            console.log('Enviando dados locais para a nuvem...');
+            
+            try {
+              if (forceUpload) {
+                await supabase.from('transactions').delete().eq('user_id', currentUser.id);
+              }
 
-               const { error: txErr } = await supabase.from('transactions').upsert(context.transactions.map(mapToDB));
-               if (txErr) throw new Error('Transações: ' + txErr.message);
+              const { error: txErr } = await supabase.from('transactions').upsert(currentCtx.transactions.map(mapToDB));
+              if (txErr) throw new Error('Transações: ' + txErr.message);
 
-               const { error: stgErr } = await supabase.from('user_settings').upsert({ user_id: currentUser.id, settings: context.settings });
-               if (stgErr) throw new Error('Settings: ' + stgErr.message);
-               
-               const piToPush = [];
-                Object.entries(context.paidItems || {}).forEach(([month, items]) => {
-                  Object.entries(items).forEach(([id, isPaid]) => {
-                    piToPush.push({ user_id: currentUser.id, item_id: `${month}:::${id}`, is_paid: isPaid });
-                  });
-                });
-               if (piToPush.length > 0) {
-                 const { error: piErr } = await supabase.from('paid_items').upsert(piToPush);
-                 if (piErr) throw new Error('Paid Items: ' + piErr.message);
-               }
-               
-               if (forceUpload) {
-                 sessionStorage.removeItem('force_cloud_upload');
-                 sessionStorage.setItem('has_synced_cloud', 'true');
-                 alert('Nuvem atualizada com sucesso com o seu backup!');
-               }
-             } catch (err) {
-               console.error('Erro forçando upload:', err);
-               alert('Erro ao enviar para a nuvem: ' + err.message);
-             }
-           }
+              const settingsToPush = {
+                ...(currentCtx.settings || {}),
+                paidItems: currentCtx.paidItems || {}
+              };
+              const { error: stgErr } = await supabase.from('user_settings').upsert({ user_id: currentUser.id, settings: settingsToPush });
+              if (stgErr) throw new Error('Settings: ' + stgErr.message);
+              
+              if (forceUpload) {
+                sessionStorage.removeItem('force_cloud_upload');
+                sessionStorage.setItem('has_synced_cloud', 'true');
+                alert('Nuvem atualizada com sucesso com o seu backup!');
+              }
+            } catch (err) {
+              console.error('Erro forçando upload:', err);
+              alert('Erro ao enviar para a nuvem: ' + err.message);
+            }
+          }
         }
 
         setIsSynced(true);
       } catch (err) {
-        console.error('Erro na sincronizaǜo inicial:', err);
+        console.error('Erro na sincronização inicial:', err);
         setSyncError(err.message);
-        setIsSynced(true); // Permite usar o app mesmo com erro
+        setIsSynced(true);
       }
     };
 
     fetchCloudData();
   }, [currentUser.id]);
 
-  // Sync reativo: Quando o usuǭrio altera algo no Context, enviamos para a nuvem.
+  // Função centralizada para envio reativo à nuvem
+  const syncToCloud = useCallback(async () => {
+    const current = contextRef.current;
+    if (!current) return;
+    try {
+      if (current.transactions && current.transactions.length > 0) {
+        const toPush = current.transactions.slice(-500).map(mapToDB);
+        await supabase.from('transactions').upsert(toPush);
+      }
+      if (current.settings || current.paidItems) {
+        const settingsToPush = {
+          ...(current.settings || {}),
+          paidItems: current.paidItems || {}
+        };
+        await supabase.from('user_settings').upsert({ user_id: currentUser.id, settings: settingsToPush });
+      }
+    } catch (err) {
+      console.error('Erro sincronizando alterações com a nuvem:', err);
+    }
+  }, [currentUser.id]);
+
+  // Sync reativo com debounce ágil (400ms)
   useEffect(() => {
     if (!isSynced) return;
-    
-    const syncToCloud = async () => {
-      try {
-        if (context.transactions && context.transactions.length > 0) {
-          // Na versǜo final ideal, sincronizaramos apenas a diferena.
-          // Como Ǹ um projeto simples, fazemos um upsert de todos. 
-          // Limitamos a 500 pra evitar bugs de payload grande (se houver muitos).
-          const toPush = context.transactions.slice(-500).map(mapToDB);
-          await supabase.from('transactions').upsert(toPush);
-        }
-        if (context.settings) {
-          await supabase.from('user_settings').upsert({ user_id: currentUser.id, settings: context.settings });
-        }
-        if (context.paidItems) {
-           const piToPush = [];
-           Object.entries(context.paidItems || {}).forEach(([month, items]) => {
-              Object.entries(items).forEach(([id, isPaid]) => {
-                 piToPush.push({ user_id: currentUser.id, item_id: `${month}:::${id}`, is_paid: isPaid });
-              });
-           });
-           if (piToPush.length > 0) await supabase.from('paid_items').upsert(piToPush);
-        }
-      } catch (err) {
-        console.error('Erro sincronizando alteraes com a nuvem:', err);
-      }
-    };
-
-    // Usa um timeout para fazer "debounce" (nǜo enviar pra cada tecla digitada)
     const timer = setTimeout(() => {
       syncToCloud();
-    }, 2000);
+    }, 400);
 
     return () => clearTimeout(timer);
-  }, [context.transactions, context.settings, context.paidItems, isSynced, currentUser.id]);
+  }, [context.transactions, context.settings, context.paidItems, isSynced, syncToCloud]);
+
+  // Garantir sincronização se a janela/aba estiver sendo fechada
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      syncToCloud();
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handleBeforeUnload);
+    };
+  }, [syncToCloud]);
 
   if (syncError) {
     return <div style={{ padding: '1rem', background: '#fee2e2', color: '#dc2626', textAlign: 'center' }}>Erro de sincronização: {syncError}</div>;
