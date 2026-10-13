@@ -64,7 +64,8 @@ export const TransactionsProvider = ({ children, currentUser }) => {
           'CARTÃO XP': 10
         },
         overrides: {}
-      }
+      },
+      ignoredNotifications: []
     };
 
     const saved = localStorage.getItem(getStorageKey('settings'));
@@ -73,6 +74,7 @@ export const TransactionsProvider = ({ children, currentUser }) => {
       return {
         ...defaultSettings,
         ...parsed,
+        ignoredNotifications: parsed.ignoredNotifications || [],
         closingDays: {
           ...defaultSettings.closingDays,
           ...(parsed.closingDays || {})
@@ -213,6 +215,31 @@ export const TransactionsProvider = ({ children, currentUser }) => {
 
   const updateSettings = (newSettings) => {
     setSettings((prev) => ({ ...prev, ...newSettings }));
+  };
+
+  const ignoreNotification = (notificationId) => {
+    setSettings((prev) => {
+      const currentIgnored = prev.ignoredNotifications || [];
+      if (currentIgnored.includes(notificationId)) return prev;
+      return {
+        ...prev,
+        ignoredNotifications: [...currentIgnored, notificationId]
+      };
+    });
+  };
+
+  const unignoreNotification = (notificationId) => {
+    setSettings((prev) => ({
+      ...prev,
+      ignoredNotifications: (prev.ignoredNotifications || []).filter(id => id !== notificationId)
+    }));
+  };
+
+  const clearIgnoredNotifications = () => {
+    setSettings((prev) => ({
+      ...prev,
+      ignoredNotifications: []
+    }));
   };
 
   const togglePaidStatus = (month, id) => {
@@ -1075,6 +1102,9 @@ export const TransactionsProvider = ({ children, currentUser }) => {
         incomesBySource,
         settings,
         updateSettings,
+        ignoreNotification,
+        unignoreNotification,
+        clearIgnoredNotifications,
         addFixedExpense,
         removeFixedExpense,
         editFixedExpense,

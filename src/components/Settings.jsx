@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useTransactions } from '../context/TransactionsContext';
 import PaymentMethodManagerModal from './PaymentMethodManagerModal';
-import { Settings as SettingsIcon, Trash2, PlusCircle, CreditCard, Edit2, Save } from 'lucide-react';
+import { Settings as SettingsIcon, Trash2, PlusCircle, CreditCard, Edit2, Save, Bell } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -10,7 +10,7 @@ const formatCurrency = (value) => {
 };
 
 const Settings = () => {
-  const { settings, updateSettings, currentMonth, addFixedExpense, removeFixedExpense, editFixedExpense, categories, paymentMethods, exportBackup, importBackup } = useTransactions();
+  const { settings, updateSettings, currentMonth, addFixedExpense, removeFixedExpense, editFixedExpense, categories, paymentMethods, exportBackup, importBackup, clearIgnoredNotifications } = useTransactions();
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   
   const [desc, setDesc] = useState('');
@@ -300,6 +300,21 @@ const Settings = () => {
           </div>
         </div>
       </div>
+
+      {settings.ignoredNotifications?.length > 0 && (
+        <div className="card">
+          <div className="flex items-center gap-2 mb-4">
+            <Bell size={24} className="text-warning" />
+            <h2>Central de Notificações</h2>
+          </div>
+          <p className="text-muted mb-4" style={{ fontSize: '0.9rem' }}>
+            Você possui <strong>{settings.ignoredNotifications.length}</strong> notificação(ões) ignorada(s).
+          </p>
+          <button className="btn btn-outline" onClick={clearIgnoredNotifications}>
+            Restaurar Notificações Ignoradas
+          </button>
+        </div>
+      )}
 
       {showPaymentModal && <PaymentMethodManagerModal onClose={() => setShowPaymentModal(false)} />}
     </div>

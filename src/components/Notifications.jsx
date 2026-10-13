@@ -1,11 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTransactions } from '../context/TransactionsContext';
-import { Bell, CheckCircle2, AlertTriangle, AlertCircle } from 'lucide-react';
+import { Bell, CheckCircle2, AlertTriangle, AlertCircle, BellOff, RotateCcw } from 'lucide-react';
 import { format, parseISO, differenceInDays, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 const Notifications = () => {
-  const { allTransactions, getEffectiveMonth, paidItems, togglePaidStatus, settings } = useTransactions();
+  const { 
+    allTransactions, 
+    getEffectiveMonth, 
+    paidItems, 
+    togglePaidStatus, 
+    settings, 
+    ignoreNotification, 
+    clearIgnoredNotifications 
+  } = useTransactions();
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const dropdownRef = useRef(null);
@@ -23,20 +31,22 @@ const Notifications = () => {
   useEffect(() => {
     const today = startOfDay(new Date());
     const notifs = [];
+    const ignored = settings?.ignoredNotifications || [];
 
     // 1. Processar Despesas Fixas Recorrentes
     const fixedExpenses = allTransactions.filter(t => t.isFixedExpense);
     fixedExpenses.forEach(fe => {
       const monthStr = fe.overrideMonth;
       const isPaid = paidItems[monthStr]?.[fe.baseId];
+      const notifId = `notif-fe-${fe.baseId}-${monthStr}`;
       
-      if (!isPaid) {
+      if (!isPaid && !ignored.includes(notifId)) {
         const dueDate = parseISO(fe.date);
         const diff = differenceInDays(dueDate, today);
         
         if (diff <= 2) {
           notifs.push({
-            id: `notif-fe-${fe.baseId}-${monthStr}`,
+            id: notifId,
             title: fe.description,
             monthStr,
             itemId: fe.baseId,
@@ -67,8 +77,9 @@ const Notifications = () => {
       Object.keys(invoices[effMonth]).forEach(card => {
         const amount = invoices[effMonth][card];
         const isPaid = paidItems[effMonth]?.[card];
+        const notifId = `notif-card-${card}-${effMonth}`;
         
-        if (!isPaid && amount > 0) {
+        if (!isPaid && amount > 0 && !ignored.includes(notifId)) {
           const dueDay = settings.dueDays?.overrides?.[effMonth]?.[card] 
                       ?? settings.dueDays?.default?.[card] 
                       ?? 10;
@@ -79,7 +90,7 @@ const Notifications = () => {
 
           if (diff <= 2) {
             notifs.push({
-              id: `notif-card-${card}-${effMonth}`,
+              id: notifId,
               title: `Fatura ${card}`,
               monthStr: effMonth,
               itemId: card,
@@ -104,9 +115,16 @@ const Notifications = () => {
     togglePaidStatus(monthStr, itemId);
   };
 
+  const handleIgnore = (e, notifId) => {
+    e.stopPropagation();
+    ignoreNotification(notifId);
+  };
+
   const formatCurrency = (value) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   };
+
+  const ignoredCount = settings?.ignoredNotifications?.length || 0;
 
   return (
     <div style={{ position: 'relative' }} ref={dropdownRef}>
@@ -133,7 +151,7 @@ const Notifications = () => {
       {isOpen && (
         <div style={{
           position: 'absolute', top: '100%', right: '0',
-          width: '350px', background: 'var(--surface-color)',
+          width: '360px', maxWidth: 'calc(100vw - 2rem)', background: 'var(--surface-color)',
           border: '1px solid var(--border-color)', borderRadius: '8px',
           boxShadow: '0 10px 25px rgba(0,0,0,0.5)', zIndex: 1000,
           marginTop: '0.5rem', maxHeight: '500px', overflowY: 'auto'
@@ -175,20 +193,73 @@ const Notifications = () => {
                       </span>
                     </div>
 
-                    <button 
-                      onClick={() => handleMarkAsPaid(n.monthStr, n.itemId)}
-                      className="btn" 
-                      style={{ 
-                        marginTop: '0.5rem', padding: '0.4rem', fontSize: '0.8rem', 
-                        background: 'transparent', border: '1px solid var(--income-color)', color: 'var(--income-color)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem'
-                      }}
-                    >
-                      <CheckCircle2 size={16} /> Marcar como Pago
-                    </button>
+                    <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                      <button 
+                        onClick={() => handleMarkAsPaid(n.monthStr, n.itemId)}
+                        className="btn" 
+                        style={{ 
+                          flex: 1,
+                          padding: '0.45rem', fontSize: '0.8rem', 
+                          background: 'transparent', border: '1px solid var(--income-color)', color: 'var(--income-color)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem',
+                          borderRadius: '6px', cursor: 'pointer'
+                        }}
+                      >
+                        <CheckCircle2 size={16} /> Marcar como Pago
+                      </button>
+
+                      <button 
+                        onClick={(e) => handleIgnore(e, n.id)}
+                        className="btn btn-outline" 
+                        style={{ 
+                          padding: '0.45rem 0.75rem', fontSize: '0.8rem', 
+                          color: 'var(--text-muted)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem',
+                          borderRadius: '6px', cursor: 'pointer'
+                        }}
+                        title="Ignorar esta notificação"
+                      >
+                        <BellOff size={15} /> Ignorar
+                      </button>
+                    </div>
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {ignoredCount > 0 && (
+            <div style={{
+              padding: '0.65rem 1rem',
+              borderTop: '1px solid var(--border-color)',
+              background: 'rgba(0, 0, 0, 0.2)',
+              fontSize: '0.75rem',
+              color: 'var(--text-muted)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <span>
+                {ignoredCount} notificação(ões) ignorada(s)
+              </span>
+              <button
+                onClick={clearIgnoredNotifications}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--primary-color)',
+                  cursor: 'pointer',
+                  fontSize: '0.75rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.25rem',
+                  textDecoration: 'underline',
+                  padding: 0
+                }}
+                title="Restaurar todas as notificações ignoradas"
+              >
+                <RotateCcw size={12} /> Restaurar
+              </button>
             </div>
           )}
         </div>
@@ -198,3 +269,4 @@ const Notifications = () => {
 };
 
 export default Notifications;
+

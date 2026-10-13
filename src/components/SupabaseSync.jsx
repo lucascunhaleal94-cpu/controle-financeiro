@@ -142,6 +142,10 @@ const SupabaseSync = ({ currentUser, children }) => {
             contextRef.current.setPaidItems(finalPaidItems);
           }
 
+          if (contextRef.current?.updateSettings && Object.keys(cleanSettings).length > 0) {
+            contextRef.current.updateSettings(cleanSettings);
+          }
+
           const wasSynced = sessionStorage.getItem('has_synced_cloud');
           if (!wasSynced) {
             sessionStorage.setItem('has_synced_cloud', 'true');
