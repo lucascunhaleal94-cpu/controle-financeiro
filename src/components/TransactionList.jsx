@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useTransactions } from '../context/TransactionsContext';
 import { Trash2, ArrowUpCircle, ArrowDownCircle, Calendar, Edit2, CheckCircle2, Paperclip, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { format, parseISO, isToday, isBefore, startOfDay } from 'date-fns';
@@ -119,15 +119,11 @@ const safeFormatDate = (dateString, formatStr) => {
     getEffectiveMonth
   } = useTransactions();
 
-  if (currentMonthTransactions.length === 0) {
-    return (
-      <div className="card text-center" style={{ padding: '3rem', marginTop: '2rem' }}>
-        <p className="text-muted">Nenhuma transação cadastrada para esta fatura/mês.</p>
-      </div>
-    );
-  }
+
 
   const [deleteConfirmTx, setDeleteConfirmTx] = useState(null);
+  const [payConfirmTx, setPayConfirmTx] = useState(null);
+  const [bulkPayConfirm, setBulkPayConfirm] = useState(false);
   const [sortConfig, setSortConfig] = useState({ key: 'dueDate', direction: 'asc' });
   const [selectedTx, setSelectedTx] = useState([]);
   const [isFixedExpanded, setIsFixedExpanded] = useState(false);
@@ -287,7 +283,7 @@ const safeFormatDate = (dateString, formatStr) => {
 
   
   
-  const handleBulkPay = () => {
+  const executeBulkPay = useCallback(() => {
     if (selectedTx.length === 0) return;
     selectedTx.forEach(txId => {
       const t = currentMonthTransactions.find(x => x.id === txId);
@@ -301,9 +297,15 @@ const safeFormatDate = (dateString, formatStr) => {
       }
     });
     setSelectedTx([]);
+    setBulkPayConfirm(false);
+  }, [selectedTx, currentMonthTransactions, getEffectiveMonth, currentMonth, togglePaidStatus]);
+
+  const handleBulkPay = () => {
+    if (selectedTx.length === 0) return;
+    setBulkPayConfirm(true);
   };
 
-  const handleTogglePaid = (t) => {
+  const executeTogglePaid = useCallback((t) => {
     const effMonth = t.overrideMonth || (getEffectiveMonth ? getEffectiveMonth(t) : currentMonth);
     if (t.isFixedExpense) {
       togglePaidStatus(effMonth, t.baseId);
@@ -317,13 +319,60 @@ const safeFormatDate = (dateString, formatStr) => {
         togglePaidStatus(effMonth, t.id);
       }
     }
+  }, [getEffectiveMonth, currentMonth, togglePaidStatus, paidItems]);
+
+  const handleTogglePaid = (t) => {
+    if (t.type !== 'expense') return;
+    // Se a conta já estiver paga, a ação é desmarcar (não necessita de dupla confirmação)
+    if (t.isPaid) {
+      executeTogglePaid(t);
+      return;
+    }
+    // Se estiver marcando como PAGA, solicita a dupla confirmação ágil para evitar cliques acidentais
+    setPayConfirmTx(t);
   };
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (payConfirmTx) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          setPayConfirmTx(null);
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          executeTogglePaid(payConfirmTx);
+          setPayConfirmTx(null);
+        }
+      } else if (bulkPayConfirm) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          setBulkPayConfirm(false);
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          executeBulkPay();
+        }
+      }
+    };
+
+    if (payConfirmTx || bulkPayConfirm) {
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [payConfirmTx, bulkPayConfirm, executeTogglePaid, executeBulkPay]);
 
   const filteredSubtotal = processedTransactions.reduce((acc, t) => {
     return t.type === 'income' ? acc + t.amount : acc - t.amount;
   }, 0);
 
   const subtotalColor = filteredSubtotal >= 0 ? 'var(--income-color)' : 'var(--danger-color)';
+
+  if (currentMonthTransactions.length === 0) {
+    return (
+      <div className="card text-center" style={{ padding: '3rem', marginTop: '2rem' }}>
+        <p className="text-muted">Nenhuma transação cadastrada para esta fatura/mês.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="card" style={{ marginTop: '2rem' }}>
@@ -802,6 +851,211 @@ const safeFormatDate = (dateString, formatStr) => {
               </button>
               <button className="btn" style={{ backgroundColor: 'transparent', color: 'var(--text-muted)' }} onClick={() => setDeleteConfirmTx(null)}>
                 Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Dupla Confirmação Ágil para Marcar como PAGA */}
+      {payConfirmTx && (
+        <div 
+          style={{ 
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, 
+            backgroundColor: 'rgba(15, 23, 42, 0.75)', 
+            backdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', 
+            zIndex: 1000, padding: '1rem' 
+          }}
+          onClick={() => setPayConfirmTx(null)}
+        >
+          <div 
+            className="card" 
+            style={{ 
+              width: '100%', maxWidth: '420px', 
+              backgroundColor: 'var(--surface-color)', 
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5)',
+              border: '1px solid var(--border-color)', 
+              borderRadius: '12px', 
+              padding: '1.5rem',
+              margin: 'auto'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
+              <div style={{ 
+                width: '42px', height: '42px', borderRadius: '50%', 
+                backgroundColor: 'rgba(16, 185, 129, 0.15)', 
+                border: '1px solid rgba(16, 185, 129, 0.3)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 
+              }}>
+                <CheckCircle2 size={24} style={{ color: 'var(--income-color)' }} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.15rem', color: 'var(--text-main)' }}>Confirmar Pagamento</h3>
+                <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  Confirmação para evitar marcação acidental
+                </p>
+              </div>
+            </div>
+
+            <div style={{ 
+              backgroundColor: 'var(--bg-color)', padding: '1rem', borderRadius: '8px', 
+              border: '1px solid var(--border-color)', marginBottom: '1.25rem' 
+            }}>
+              <div style={{ fontSize: '1.05rem', fontWeight: '600', color: 'var(--text-main)', marginBottom: '0.5rem', wordBreak: 'break-word' }}>
+                {payConfirmTx.description}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem', fontSize: '0.9rem' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Valor:</span>
+                <span style={{ fontWeight: '700', fontSize: '1.15rem', color: 'var(--income-color)' }}>
+                  {formatCurrency(payConfirmTx.amount)}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem', fontSize: '0.85rem' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Vencimento:</span>
+                <span style={{ color: 'var(--text-main)', fontWeight: '500' }}>
+                  {safeFormatDate(payConfirmTx.computedDueDate || payConfirmTx.date || payConfirmTx.originalDate, "dd/MM/yyyy")}
+                </span>
+              </div>
+              {payConfirmTx.category && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem', fontSize: '0.85rem' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Categoria:</span>
+                  <span style={{ color: 'var(--text-main)' }}>{payConfirmTx.category}</span>
+                </div>
+              )}
+              {payConfirmTx.paymentMethod && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Pagamento:</span>
+                  <span style={{ color: 'var(--text-main)' }}>{payConfirmTx.paymentMethod}</span>
+                </div>
+              )}
+            </div>
+
+            <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>
+              Deseja marcar esta conta como <strong style={{ color: 'var(--income-color)' }}>PAGA</strong>?
+            </p>
+
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <button 
+                type="button"
+                className="btn btn-outline" 
+                onClick={() => setPayConfirmTx(null)}
+                style={{ flex: 1, padding: '0.6rem 1rem' }}
+              >
+                Cancelar <span style={{ opacity: 0.6, fontSize: '0.75rem', marginLeft: '4px' }}>[Esc]</span>
+              </button>
+              <button 
+                type="button"
+                className="btn btn-primary" 
+                autoFocus
+                onClick={() => {
+                  executeTogglePaid(payConfirmTx);
+                  setPayConfirmTx(null);
+                }}
+                style={{ 
+                  flex: 1.2, 
+                  backgroundColor: 'var(--income-color)', 
+                  borderColor: 'var(--income-color)',
+                  color: 'white',
+                  fontWeight: '600',
+                  padding: '0.6rem 1rem'
+                }}
+              >
+                Confirmar <span style={{ opacity: 0.8, fontSize: '0.75rem', marginLeft: '4px' }}>[Enter]</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmação para Pagar Selecionados */}
+      {bulkPayConfirm && (
+        <div 
+          style={{ 
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, 
+            backgroundColor: 'rgba(15, 23, 42, 0.75)', 
+            backdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', 
+            zIndex: 1000, padding: '1rem' 
+          }}
+          onClick={() => setBulkPayConfirm(false)}
+        >
+          <div 
+            className="card" 
+            style={{ 
+              width: '100%', maxWidth: '420px', 
+              backgroundColor: 'var(--surface-color)', 
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5)',
+              border: '1px solid var(--border-color)', 
+              borderRadius: '12px', 
+              padding: '1.5rem',
+              margin: 'auto'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
+              <div style={{ 
+                width: '42px', height: '42px', borderRadius: '50%', 
+                backgroundColor: 'rgba(16, 185, 129, 0.15)', 
+                border: '1px solid rgba(16, 185, 129, 0.3)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 
+              }}>
+                <CheckCircle2 size={24} style={{ color: 'var(--income-color)' }} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.15rem', color: 'var(--text-main)' }}>Pagar Selecionados</h3>
+                <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  {selectedTx.length} lançamento(s) selecionado(s)
+                </p>
+              </div>
+            </div>
+
+            <div style={{ 
+              backgroundColor: 'var(--bg-color)', padding: '1rem', borderRadius: '8px', 
+              border: '1px solid var(--border-color)', marginBottom: '1.25rem' 
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.9rem' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Total dos itens:</span>
+                <span style={{ fontWeight: '700', fontSize: '1.15rem', color: 'var(--income-color)' }}>
+                  {formatCurrency(
+                    selectedTx.reduce((sum, txId) => {
+                      const t = currentMonthTransactions.find(x => x.id === txId);
+                      return t ? sum + (t.amount || 0) : sum;
+                    }, 0)
+                  )}
+                </span>
+              </div>
+            </div>
+
+            <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>
+              Deseja marcar todos os <strong>{selectedTx.length}</strong> lançamentos selecionados como <strong style={{ color: 'var(--income-color)' }}>PAGOS</strong>?
+            </p>
+
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <button 
+                type="button"
+                className="btn btn-outline" 
+                onClick={() => setBulkPayConfirm(false)}
+                style={{ flex: 1, padding: '0.6rem 1rem' }}
+              >
+                Cancelar <span style={{ opacity: 0.6, fontSize: '0.75rem', marginLeft: '4px' }}>[Esc]</span>
+              </button>
+              <button 
+                type="button"
+                className="btn btn-primary" 
+                autoFocus
+                onClick={executeBulkPay}
+                style={{ 
+                  flex: 1.2, 
+                  backgroundColor: 'var(--income-color)', 
+                  borderColor: 'var(--income-color)',
+                  color: 'white',
+                  fontWeight: '600',
+                  padding: '0.6rem 1rem'
+                }}
+              >
+                Confirmar <span style={{ opacity: 0.8, fontSize: '0.75rem', marginLeft: '4px' }}>[Enter]</span>
               </button>
             </div>
           </div>
