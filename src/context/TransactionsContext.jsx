@@ -302,10 +302,19 @@ export const TransactionsProvider = ({ children, currentUser }) => {
     });
   };
 
-  const removeFixedExpense = (id) => {
-    updateSettings({
-      fixedExpenses: (settings.fixedExpenses || []).filter(e => e.id !== id)
-    });
+  const removeFixedExpense = (id, mode = 'all', fromMonth = currentMonth) => {
+    if (mode === 'all') {
+      updateSettings({
+        fixedExpenses: (settings.fixedExpenses || []).filter(e => e.id !== id)
+      });
+    } else if (mode === 'currentAndSubsequent') {
+      const prevMonthStr = format(subMonths(parseISO(`${fromMonth}-01`), 1), 'yyyy-MM');
+      updateSettings({
+        fixedExpenses: (settings.fixedExpenses || []).map(e => 
+          e.id === id ? { ...e, endMonth: prevMonthStr } : e
+        )
+      });
+    }
   };
 
   const editFixedExpense = (id, updatedExpense) => {
@@ -392,15 +401,28 @@ export const TransactionsProvider = ({ children, currentUser }) => {
         description = `${transaction.description} (${i + 1}/${installments})`;
       }
 
+      const isCreditCard = transaction.paymentMethod?.startsWith('CARTÃO');
+      let txDate = transaction.date;
+      let txDueDate = transaction.dueDate;
+
+      if (!isCreditCard && i > 0) {
+        if (txDate) {
+          txDate = format(addMonths(parseISO(txDate), i), 'yyyy-MM-dd');
+        }
+        if (txDueDate) {
+          txDueDate = format(addMonths(parseISO(txDueDate), i), 'yyyy-MM-dd');
+        }
+      }
+
       newTransactions.push({
         id: uuidv4(),
         groupId,
         type: transaction.type,
         description,
         amount: parcelAmount,
-        originalDate: transaction.date,
-        dueDate: transaction.dueDate,
-        date: transaction.date,
+        originalDate: txDate,
+        dueDate: txDueDate,
+        date: txDate,
         details: transaction.details,
         hasAttachment: !!transaction.attachment,
         attachmentKey,
@@ -454,10 +476,28 @@ export const TransactionsProvider = ({ children, currentUser }) => {
       if (txToEdit.groupId && t.groupId === txToEdit.groupId) {
         if (mode === 'all' || (mode === 'subsequent' && t.currentInstallment > txToEdit.currentInstallment)) {
           const cleanDesc = updatedData.description ? updatedData.description.replace(/\s\(\d+\/\d+\)$/, '') : t.description;
+          const isCreditCard = (updatedData.paymentMethod || t.paymentMethod)?.startsWith('CARTÃO');
+          const monthDiff = t.currentInstallment - txToEdit.currentInstallment;
+          
+          let nextDate = updatedData.date || t.date;
+          let nextDueDate = updatedData.dueDate !== undefined ? updatedData.dueDate : t.dueDate;
+
+          if (!isCreditCard && monthDiff !== 0) {
+            if (updatedData.date) {
+              nextDate = format(addMonths(parseISO(updatedData.date), monthDiff), 'yyyy-MM-dd');
+            }
+            if (updatedData.dueDate) {
+              nextDueDate = format(addMonths(parseISO(updatedData.dueDate), monthDiff), 'yyyy-MM-dd');
+            }
+          }
+
           return {
             ...t,
             ...updatedData,
             id: t.id,
+            date: nextDate,
+            originalDate: nextDate,
+            dueDate: nextDueDate,
             amount: parseFloat(updatedData.amount) || t.amount,
             currentInstallment: t.currentInstallment,
             installmentsTotal: t.installmentsTotal,
@@ -519,6 +559,8 @@ export const TransactionsProvider = ({ children, currentUser }) => {
 
       if (settings.fixedExpenses) {
         settings.fixedExpenses.forEach(fe => {
+          if (fe.endMonth && mStr > fe.endMonth) return;
+
           const override = settings.fixedExpensesOverrides?.[fe.id]?.[mStr];
           const isObj = override !== null && typeof override === 'object';
           

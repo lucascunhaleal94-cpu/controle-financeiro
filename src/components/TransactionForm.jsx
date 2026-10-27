@@ -64,6 +64,7 @@ const TransactionForm = ({ onClose, initialData }) => {
   };
 
   const isCreditCard = type === 'expense' && paymentMethod.startsWith('CARTÃO');
+  const canHaveInstallments = type === 'expense' && (isCreditCard || paymentMethod === 'DINHEIRO/PIX');
 
   return (
     <div style={{
@@ -153,7 +154,7 @@ const TransactionForm = ({ onClose, initialData }) => {
 
           <div style={{ display: 'flex', gap: '1rem' }}>
             <div className="form-group w-full">
-              <label className="form-label">{isCreditCard ? 'Valor Total (R$)' : 'Valor (R$)'}</label>
+              <label className="form-label">{canHaveInstallments ? 'Valor Total (R$)' : 'Valor (R$)'}</label>
               <input
                 type="number"
                 step="0.01"
@@ -212,8 +213,9 @@ const TransactionForm = ({ onClose, initialData }) => {
                     className="form-control" 
                     value={paymentMethod} 
                     onChange={(e) => {
-                      setPaymentMethod(e.target.value);
-                      if (!e.target.value.startsWith('CARTÃO')) {
+                      const val = e.target.value;
+                      setPaymentMethod(val);
+                      if (!val.startsWith('CARTÃO') && val !== 'DINHEIRO/PIX') {
                         setInstallments(1);
                       }
                     }}
@@ -225,7 +227,7 @@ const TransactionForm = ({ onClose, initialData }) => {
                 </div>
               </div>
               
-              {isCreditCard && !initialData && (
+              {canHaveInstallments && !initialData && (
                 <div className="form-group">
                   <label className="form-label">Parcelas (Valor total será dividido)</label>
                   <input
