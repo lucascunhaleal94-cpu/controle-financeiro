@@ -41,10 +41,11 @@ export const TransactionsProvider = ({ children, currentUser }) => {
   });
 
   const [settings, setSettings] = useState(() => {
+    const isAdminUser = currentUser?.email === 'lucas@admin.com';
     const defaultSettings = {
       appStartDate: format(new Date(), 'yyyy-MM'),
       initialBalance: 0,
-      fixedIncomes: { LUCAS: 15600, GABRIELA: 0 },
+      fixedIncomes: isAdminUser ? { LUCAS: 15600, GABRIELA: 0 } : {},
       fixedExpenses: [], 
       fixedExpensesOverrides: {}, 
       closingDays: {
@@ -74,6 +75,7 @@ export const TransactionsProvider = ({ children, currentUser }) => {
       return {
         ...defaultSettings,
         ...parsed,
+        fixedIncomes: parsed.fixedIncomes !== undefined ? parsed.fixedIncomes : defaultSettings.fixedIncomes,
         ignoredNotifications: parsed.ignoredNotifications || [],
         closingDays: {
           ...defaultSettings.closingDays,
@@ -524,6 +526,47 @@ export const TransactionsProvider = ({ children, currentUser }) => {
     }
   };
 
+  const updateIncomeSource = (oldName, newName, newValue) => {
+    const formattedNewName = newName.trim().toUpperCase();
+    if (!formattedNewName) return;
+
+    setSettings(prev => {
+      const currentIncomes = prev.fixedIncomes || {};
+      const updatedIncomes = {};
+      let found = false;
+      Object.entries(currentIncomes).forEach(([key, val]) => {
+        if (key === oldName) {
+          updatedIncomes[formattedNewName] = newValue;
+          found = true;
+        } else {
+          updatedIncomes[key] = val;
+        }
+      });
+      if (!found) {
+        updatedIncomes[formattedNewName] = newValue;
+      }
+      return {
+        ...prev,
+        fixedIncomes: updatedIncomes
+      };
+    });
+
+    if (oldName && oldName !== formattedNewName) {
+      setTransactions(prev => prev.map(t => t.source === oldName ? { ...t, source: formattedNewName } : t));
+    }
+  };
+
+  const deleteIncomeSource = (sourceName) => {
+    setSettings(prev => {
+      const updatedIncomes = { ...(prev.fixedIncomes || {}) };
+      delete updatedIncomes[sourceName];
+      return {
+        ...prev,
+        fixedIncomes: updatedIncomes
+      };
+    });
+  };
+
   const generateVirtualTransactions = () => {
     const virtuals = [];
     let mDate = subMonths(parseISO(`${settings.appStartDate || '2026-09'}-01`), 1);
@@ -532,28 +575,21 @@ export const TransactionsProvider = ({ children, currentUser }) => {
     while (!isBefore(endObj, mDate)) {
       const mStr = format(mDate, 'yyyy-MM');
       
-      if (settings.fixedIncomes?.LUCAS > 0) {
-        virtuals.push({
-          id: `fixed-lucas-${mStr}`,
-          type: 'income',
-          description: 'Renda Fixa (Lucas)',
-          amount: parseFloat(settings.fixedIncomes.LUCAS),
-          originalDate: `${mStr}-01`,
-          date: `${mStr}-01`,
-          source: 'LUCAS',
-          isFixed: true
-        });
-      }
-      if (settings.fixedIncomes?.GABRIELA > 0) {
-        virtuals.push({
-          id: `fixed-gabriela-${mStr}`,
-          type: 'income',
-          description: 'Renda Fixa (Gabriela)',
-          amount: parseFloat(settings.fixedIncomes.GABRIELA),
-          originalDate: `${mStr}-01`,
-          date: `${mStr}-01`,
-          source: 'GABRIELA',
-          isFixed: true
+      if (settings.fixedIncomes) {
+        Object.entries(settings.fixedIncomes).forEach(([sourceName, amountVal]) => {
+          const parsedAmt = parseFloat(amountVal);
+          if (parsedAmt > 0) {
+            virtuals.push({
+              id: `fixed-income-${sourceName.toLowerCase().replace(/\s+/g, '-')}-${mStr}`,
+              type: 'income',
+              description: `Renda Fixa (${sourceName})`,
+              amount: parsedAmt,
+              originalDate: `${mStr}-01`,
+              date: `${mStr}-01`,
+              source: sourceName,
+              isFixed: true
+            });
+          }
         });
       }
 
@@ -702,7 +738,14 @@ export const TransactionsProvider = ({ children, currentUser }) => {
     return { method, spent };
   });
 
-  const incomesBySource = INCOME_SOURCES.map((source) => {
+  const incomeSources = Array.from(
+    new Set([
+      ...Object.keys(settings.fixedIncomes || {}),
+      ...incomes.map((t) => t.source).filter(Boolean)
+    ])
+  );
+
+  const incomesBySource = incomeSources.map((source) => {
     const received = incomes
       .filter((t) => t.source === source)
       .reduce((acc, t) => acc + t.amount, 0);
@@ -1142,6 +1185,9 @@ export const TransactionsProvider = ({ children, currentUser }) => {
         expensesByCategory,
         expensesByPaymentMethod,
         incomesBySource,
+        incomeSources,
+        updateIncomeSource,
+        deleteIncomeSource,
         settings,
         updateSettings,
         ignoreNotification,

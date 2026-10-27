@@ -10,9 +10,13 @@ const formatCurrency = (value) => {
 };
 
 const Settings = () => {
-  const { settings, updateSettings, currentMonth, addFixedExpense, removeFixedExpense, editFixedExpense, categories, paymentMethods, exportBackup, importBackup, clearIgnoredNotifications } = useTransactions();
+  const { settings, updateSettings, currentMonth, addFixedExpense, removeFixedExpense, editFixedExpense, categories, paymentMethods, exportBackup, importBackup, clearIgnoredNotifications, updateIncomeSource, deleteIncomeSource } = useTransactions();
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   
+  const [incomeName, setIncomeName] = useState('');
+  const [incomeAmt, setIncomeAmt] = useState('');
+  const [editingIncomeKey, setEditingIncomeKey] = useState(null);
+
   const [desc, setDesc] = useState('');
   const [amt, setAmt] = useState('');
   const [due, setDue] = useState('');
@@ -21,13 +25,27 @@ const Settings = () => {
   const [editingFixedExpenseId, setEditingFixedExpenseId] = useState(null);
   const [deleteConfirmFixed, setDeleteConfirmFixed] = useState(null);
 
-  const handleFixedIncomeChange = (source, value) => {
-    updateSettings({
-      fixedIncomes: {
-        ...settings.fixedIncomes,
-        [source]: value
-      }
-    });
+  const handleAddOrEditFixedIncome = (e) => {
+    e.preventDefault();
+    const formattedName = incomeName.trim().toUpperCase();
+    if (!formattedName || incomeAmt === '') return;
+
+    const parsedVal = parseFloat(incomeAmt) || 0;
+
+    if (editingIncomeKey) {
+      updateIncomeSource(editingIncomeKey, formattedName, parsedVal);
+    } else {
+      updateSettings({
+        fixedIncomes: {
+          ...(settings.fixedIncomes || {}),
+          [formattedName]: parsedVal
+        }
+      });
+    }
+
+    setEditingIncomeKey(null);
+    setIncomeName('');
+    setIncomeAmt('');
   };
 
   const handleClosingDayChange = (card, day) => {
@@ -110,24 +128,96 @@ const Settings = () => {
           <SettingsIcon size={24} className="text-primary" />
           <h2>Rendas Fixas (Automáticas)</h2>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem' }}>
-          <div className="form-group">
-            <label className="form-label">LUCAS (R$)</label>
+        <form onSubmit={handleAddOrEditFixedIncome} style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginBottom: Object.keys(settings.fixedIncomes || {}).length > 0 ? '1.5rem' : 0, alignItems: 'flex-end', background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '8px' }}>
+          <div className="form-group" style={{ flex: '1 1 200px', marginBottom: 0 }}>
+            <label className="form-label">Nome / Fonte da Renda</label>
             <input
-              type="number" step="0.01" min="0" className="form-control"
-              value={settings.fixedIncomes?.LUCAS || 0}
-              onChange={(e) => handleFixedIncomeChange('LUCAS', e.target.value)}
+              type="text"
+              className="form-control"
+              placeholder="Ex: Salário, João, Maria..."
+              value={incomeName}
+              onChange={(e) => setIncomeName(e.target.value)}
+              required
             />
           </div>
-          <div className="form-group">
-            <label className="form-label">GABRIELA (R$)</label>
+          <div className="form-group" style={{ flex: '1 1 150px', marginBottom: 0 }}>
+            <label className="form-label">Valor Mensal (R$)</label>
             <input
-              type="number" step="0.01" min="0" className="form-control"
-              value={settings.fixedIncomes?.GABRIELA || 0}
-              onChange={(e) => handleFixedIncomeChange('GABRIELA', e.target.value)}
+              type="number"
+              step="0.01"
+              min="0"
+              className="form-control"
+              placeholder="0,00"
+              value={incomeAmt}
+              onChange={(e) => setIncomeAmt(e.target.value)}
+              required
             />
           </div>
-        </div>
+          <div style={{ display: 'flex', gap: '0.5rem', flex: '1 1 120px', marginBottom: 0 }}>
+            <button type="submit" className="btn btn-outline" style={{ height: '42px', flex: 1, color: 'var(--income-color)', borderColor: 'var(--income-color)' }}>
+              {editingIncomeKey ? <><Save size={18} /> Salvar</> : <><PlusCircle size={18} /> Adicionar</>}
+            </button>
+            {editingIncomeKey && (
+              <button
+                type="button"
+                className="btn btn-outline"
+                style={{ height: '42px', flex: 1, color: 'var(--text-muted)', borderColor: 'var(--text-muted)' }}
+                onClick={() => {
+                  setEditingIncomeKey(null);
+                  setIncomeName('');
+                  setIncomeAmt('');
+                }}
+              >
+                Cancelar
+              </button>
+            )}
+          </div>
+        </form>
+
+        {Object.entries(settings.fixedIncomes || {}).length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {Object.entries(settings.fixedIncomes || {}).map(([sourceName, amountVal]) => (
+              <div key={sourceName} className="flex justify-between items-center" style={{ padding: '0.75rem', border: '1px solid var(--border-color)', borderRadius: '6px' }}>
+                <div>
+                  <div style={{ fontWeight: '500' }}>{sourceName}</div>
+                  <div className="text-muted" style={{ fontSize: '0.8rem' }}>
+                    Renda fixa mensal automática
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span style={{ fontWeight: '600', color: 'var(--income-color)' }}>
+                    {formatCurrency(parseFloat(amountVal) || 0)}
+                  </span>
+                  <button
+                    onClick={() => {
+                      setEditingIncomeKey(sourceName);
+                      setIncomeName(sourceName);
+                      setIncomeAmt(String(amountVal));
+                    }}
+                    style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                    title="Editar fonte de renda"
+                  >
+                    <Edit2 size={18} />
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (editingIncomeKey === sourceName) {
+                        setEditingIncomeKey(null);
+                        setIncomeName('');
+                        setIncomeAmt('');
+                      }
+                      deleteIncomeSource(sourceName);
+                    }}
+                    style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                    title="Remover fonte de renda"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="card">
@@ -135,17 +225,32 @@ const Settings = () => {
           <SettingsIcon size={24} className="text-warning" />
           <h2>Saldo Inicial Acumulado (Anterior ao App)</h2>
         </div>
-        <div className="form-group" style={{ maxWidth: '250px' }}>
-          <label className="form-label">Valor (R$)</label>
-          <input
-            type="number" step="0.01" className="form-control"
-            value={settings.initialBalance || 0}
-            onChange={(e) => updateSettings({ initialBalance: parseFloat(e.target.value) || 0 })}
-          />
-          <p className="text-muted" style={{ fontSize: '0.8rem', marginTop: '0.5rem' }}>
-            Usado como ponto de partida antes do mês inicial do sistema ({settings.appStartDate}).
-          </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem' }}>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">Valor Inicial (R$)</label>
+            <input
+              type="number" step="0.01" className="form-control"
+              value={settings.initialBalance || 0}
+              onChange={(e) => updateSettings({ initialBalance: parseFloat(e.target.value) || 0 })}
+            />
+          </div>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">Mês Inicial do Sistema</label>
+            <input
+              type="month"
+              className="form-control"
+              value={settings.appStartDate || format(new Date(), 'yyyy-MM')}
+              onChange={(e) => {
+                if (e.target.value) {
+                  updateSettings({ appStartDate: e.target.value });
+                }
+              }}
+            />
+          </div>
         </div>
+        <p className="text-muted" style={{ fontSize: '0.8rem', marginTop: '0.75rem', marginBottom: 0 }}>
+          Usado como ponto de partida antes do mês inicial do sistema ({settings.appStartDate}).
+        </p>
       </div>
 
       <div className="card">

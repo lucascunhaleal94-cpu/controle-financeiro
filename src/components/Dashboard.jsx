@@ -281,12 +281,18 @@ const Dashboard = () => {
             <h3>Resumo dos Recebimentos</h3>
           </div>
           <div className="flex-col gap-4">
-            {incomesBySource.map((source) => (
-              <div key={source.source} className="flex justify-between items-center" style={{ padding: '0.75rem 0', borderBottom: '1px solid var(--border-color)' }}>
-                <span>{source.source}</span>
-                <span style={{ fontWeight: 'bold' }}>{formatCurrency(source.received)}</span>
-              </div>
-            ))}
+            {incomesBySource.length === 0 ? (
+              <p className="text-muted" style={{ fontSize: '0.9rem', margin: 0 }}>
+                Nenhuma receita ou renda fixa configurada neste mês.
+              </p>
+            ) : (
+              incomesBySource.map((source) => (
+                <div key={source.source} className="flex justify-between items-center" style={{ padding: '0.75rem 0', borderBottom: '1px solid var(--border-color)' }}>
+                  <span>{source.source}</span>
+                  <span style={{ fontWeight: 'bold' }}>{formatCurrency(source.received)}</span>
+                </div>
+              ))
+            )}
           </div>
         </div>
 

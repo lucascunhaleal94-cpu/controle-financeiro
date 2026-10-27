@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { useTransactions, INCOME_SOURCES } from '../context/TransactionsContext';
+import { useTransactions } from '../context/TransactionsContext';
 import { X } from 'lucide-react';
 import { format } from 'date-fns';
 
 const TransactionForm = ({ onClose, initialData }) => {
-  const { addTransaction, editTransaction, currentMonth, categories, paymentMethods, updateFixedExpenseOverride } = useTransactions();
+  const { addTransaction, editTransaction, currentMonth, categories, paymentMethods, updateFixedExpenseOverride, incomeSources } = useTransactions();
   
   const defaultDate = format(new Date(), 'yyyy-MM-dd').startsWith(currentMonth) 
     ? format(new Date(), 'yyyy-MM-dd') 
@@ -17,7 +17,7 @@ const TransactionForm = ({ onClose, initialData }) => {
   const [dueDate, setDueDate] = useState(initialData?.dueDate || '');
   const [category, setCategory] = useState(initialData?.category || categories[0]?.name || '');
   const [paymentMethod, setPaymentMethod] = useState(initialData?.paymentMethod || paymentMethods?.[0] || 'DINHEIRO/PIX');
-  const [source, setSource] = useState(initialData?.source || INCOME_SOURCES[0]);
+  const [source, setSource] = useState(initialData?.source || incomeSources?.[0] || '');
   const [installments, setInstallments] = useState(1);
   const [details, setDetails] = useState(initialData?.details || '');
   const [attachment, setAttachment] = useState(null);
@@ -36,7 +36,7 @@ const TransactionForm = ({ onClose, initialData }) => {
       dueDate: type === 'expense' && !isCreditCard ? (dueDate || date) : null,
       details,
       attachment,
-      ...(type === 'expense' ? { category, paymentMethod } : { source })
+      ...(type === 'expense' ? { category, paymentMethod } : { source: (source || 'OUTROS').trim().toUpperCase() })
     };
 
     if (initialData) {
@@ -250,15 +250,22 @@ const TransactionForm = ({ onClose, initialData }) => {
           ) : (
             <div className="form-group">
               <label className="form-label">Fonte de Recebimento</label>
-              <select 
-                className="form-control" 
-                value={source} 
+              <input
+                type="text"
+                list="income-sources-list"
+                className="form-control"
+                placeholder="Ex: Salário, Freelance, Nome..."
+                value={source}
                 onChange={(e) => setSource(e.target.value)}
-              >
-                {INCOME_SOURCES.map(s => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
+                required
+              />
+              {incomeSources?.length > 0 && (
+                <datalist id="income-sources-list">
+                  {incomeSources.map(s => (
+                    <option key={s} value={s} />
+                  ))}
+                </datalist>
+              )}
             </div>
           )}
 
