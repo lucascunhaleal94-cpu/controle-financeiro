@@ -59,12 +59,35 @@ const SupabaseSync = ({ currentUser, children }) => {
         const { data: dbCategories } = await supabase.from('categories').select('*').eq('user_id', currentUser.id);
         const { data: dbPaymentMethods } = await supabase.from('payment_methods').select('*').eq('user_id', currentUser.id);
 
-        let hasCloudData = dbTransactions && dbTransactions.length > 0;
+        // Limpar pendências de exclusão locais que não chegaram na nuvem antes do reload
+        let pendingDeletes = [];
+        try {
+          const rawPending = localStorage.getItem(getStorageKey('pendingDeletes'));
+          if (rawPending) pendingDeletes = JSON.parse(rawPending);
+        } catch (e) {
+          console.error('Erro ao ler pendingDeletes:', e);
+        }
+
+        if (Array.isArray(pendingDeletes) && pendingDeletes.length > 0) {
+          const { error: delErr } = await supabase
+            .from('transactions')
+            .delete()
+            .eq('user_id', currentUser.id)
+            .in('id', pendingDeletes);
+          if (!delErr) {
+            localStorage.removeItem(getStorageKey('pendingDeletes'));
+          }
+        }
+
+        const pendingSet = new Set(Array.isArray(pendingDeletes) ? pendingDeletes : []);
+        const filteredDbTransactions = (dbTransactions || []).filter(tx => !pendingSet.has(tx.id));
+
+        let hasCloudData = filteredDbTransactions.length > 0 || !!dbSettings;
         const forceUpload = sessionStorage.getItem('force_cloud_upload') === 'true';
 
         if (hasCloudData && !forceUpload) {
-          // Substituir transações locais pelas da nuvem
-          const localTransactions = dbTransactions.map(mapToLocal);
+          // Substituir transações locais pelas da nuvem (já sem os itens excluídos)
+          const localTransactions = filteredDbTransactions.map(mapToLocal);
           
           // Recuperar paidItems da nuvem:
           // 1º Prioridade: dbSettings.settings.paidItems (formato JSON seguro que suporta qualquer estrutura e mês)
@@ -113,29 +136,46 @@ const SupabaseSync = ({ currentUser, children }) => {
           localStorage.setItem(getStorageKey('transactions'), JSON.stringify(localTransactions));
           
           const rawSettings = dbSettings?.settings || {};
-          const { paidItems: _unused, ...cleanSettings } = rawSettings;
+          const { paidItems: _unused, categories: cloudCats, paymentMethods: cloudMethods, ...cleanSettings } = rawSettings;
           if (Object.keys(cleanSettings).length > 0) {
             localStorage.setItem(getStorageKey('settings'), JSON.stringify(cleanSettings));
           }
           
           localStorage.setItem(getStorageKey('paidItems'), JSON.stringify(finalPaidItems));
           
-          if (dbCategories && dbCategories.length > 0) {
-            const cats = dbCategories.map(c => ({ name: c.name, limit: Number(c.color || 0) }));
-            localStorage.setItem(getStorageKey('categories'), JSON.stringify(cats));
+          let finalCategories = null;
+          if (Array.isArray(cloudCats) && cloudCats.length > 0) {
+            finalCategories = cloudCats;
+          } else if (dbCategories && dbCategories.length > 0) {
+            finalCategories = dbCategories.map(c => ({ name: c.name, limit: Number(c.color || 0) }));
           }
-          if (dbPaymentMethods && dbPaymentMethods.length > 0) {
-            const methods = dbPaymentMethods.map(m => m.name);
-            localStorage.setItem(getStorageKey('paymentMethods'), JSON.stringify(methods));
+          if (finalCategories) {
+            localStorage.setItem(getStorageKey('categories'), JSON.stringify(finalCategories));
+          }
+
+          let finalPaymentMethods = null;
+          if (Array.isArray(cloudMethods) && cloudMethods.length > 0) {
+            finalPaymentMethods = cloudMethods;
+          } else if (dbPaymentMethods && dbPaymentMethods.length > 0) {
+            finalPaymentMethods = dbPaymentMethods.map(m => m.name);
+          }
+          if (finalPaymentMethods) {
+            localStorage.setItem(getStorageKey('paymentMethods'), JSON.stringify(finalPaymentMethods));
           }
 
           // Se o que temos localmente tiver dados adicionais não salvos na nuvem, atualiza a nuvem agora
           if (JSON.stringify(cloudPaidItems) !== JSON.stringify(finalPaidItems)) {
             const updatedSettings = {
               ...(cleanSettings || contextRef.current?.settings || {}),
-              paidItems: finalPaidItems
+              paidItems: finalPaidItems,
+              categories: finalCategories || contextRef.current?.categories,
+              paymentMethods: finalPaymentMethods || contextRef.current?.paymentMethods
             };
             await supabase.from('user_settings').upsert({ user_id: currentUser.id, settings: updatedSettings });
+          }
+
+          if (contextRef.current?.setTransactions) {
+            contextRef.current.setTransactions(localTransactions);
           }
 
           if (contextRef.current?.setPaidItems) {
@@ -146,16 +186,19 @@ const SupabaseSync = ({ currentUser, children }) => {
             contextRef.current.updateSettings(cleanSettings);
           }
 
-          const wasSynced = sessionStorage.getItem('has_synced_cloud');
-          if (!wasSynced) {
-            sessionStorage.setItem('has_synced_cloud', 'true');
-            window.location.reload();
-            return;
+          if (contextRef.current?.setCategories && finalCategories) {
+            contextRef.current.setCategories(finalCategories);
           }
+
+          if (contextRef.current?.setPaymentMethods && finalPaymentMethods) {
+            contextRef.current.setPaymentMethods(finalPaymentMethods);
+          }
+
+          sessionStorage.setItem('has_synced_cloud', 'true');
         } else {
           // Não há dados na nuvem, ou forçamos o upload (Migração ou Importação)
           const currentCtx = contextRef.current;
-          if (currentCtx?.transactions && currentCtx.transactions.length > 0) {
+          if ((currentCtx?.transactions && currentCtx.transactions.length > 0) || forceUpload) {
             console.log('Enviando dados locais para a nuvem...');
             
             try {
@@ -163,12 +206,16 @@ const SupabaseSync = ({ currentUser, children }) => {
                 await supabase.from('transactions').delete().eq('user_id', currentUser.id);
               }
 
-              const { error: txErr } = await supabase.from('transactions').upsert(currentCtx.transactions.map(mapToDB));
-              if (txErr) throw new Error('Transações: ' + txErr.message);
+              if (currentCtx?.transactions && currentCtx.transactions.length > 0) {
+                const { error: txErr } = await supabase.from('transactions').upsert(currentCtx.transactions.map(mapToDB));
+                if (txErr) throw new Error('Transações: ' + txErr.message);
+              }
 
               const settingsToPush = {
                 ...(currentCtx.settings || {}),
-                paidItems: currentCtx.paidItems || {}
+                paidItems: currentCtx.paidItems || {},
+                categories: currentCtx.categories || [],
+                paymentMethods: currentCtx.paymentMethods || []
               };
               const { error: stgErr } = await supabase.from('user_settings').upsert({ user_id: currentUser.id, settings: settingsToPush });
               if (stgErr) throw new Error('Settings: ' + stgErr.message);
@@ -201,14 +248,36 @@ const SupabaseSync = ({ currentUser, children }) => {
     const current = contextRef.current;
     if (!current) return;
     try {
+      const currentIds = (current.transactions || []).map(t => t.id);
+
       if (current.transactions && current.transactions.length > 0) {
         const toPush = current.transactions.slice(-500).map(mapToDB);
         await supabase.from('transactions').upsert(toPush);
       }
-      if (current.settings || current.paidItems) {
+
+      // Garantir que transações excluídas localmente também sejam removidas da nuvem
+      const { data: cloudTxIds } = await supabase
+        .from('transactions')
+        .select('id')
+        .eq('user_id', currentUser.id);
+
+      if (cloudTxIds && cloudTxIds.length > 0) {
+        const currentIdsSet = new Set(currentIds);
+        const idsToRemove = cloudTxIds
+          .map(row => row.id)
+          .filter(id => !currentIdsSet.has(id));
+
+        if (idsToRemove.length > 0) {
+          await supabase.from('transactions').delete().eq('user_id', currentUser.id).in('id', idsToRemove);
+        }
+      }
+
+      if (current.settings || current.paidItems || current.categories || current.paymentMethods) {
         const settingsToPush = {
           ...(current.settings || {}),
-          paidItems: current.paidItems || {}
+          paidItems: current.paidItems || {},
+          categories: current.categories || [],
+          paymentMethods: current.paymentMethods || []
         };
         await supabase.from('user_settings').upsert({ user_id: currentUser.id, settings: settingsToPush });
       }
@@ -225,7 +294,7 @@ const SupabaseSync = ({ currentUser, children }) => {
     }, 400);
 
     return () => clearTimeout(timer);
-  }, [context.transactions, context.settings, context.paidItems, isSynced, syncToCloud]);
+  }, [context.transactions, context.settings, context.paidItems, context.categories, context.paymentMethods, isSynced, syncToCloud]);
 
   // Garantir sincronização se a janela/aba estiver sendo fechada
   useEffect(() => {

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { format, parseISO, addMonths, subMonths, isBefore } from 'date-fns';
 import { set, del, get } from 'idb-keyval';
+import { supabase } from '../lib/supabase';
 
 const TransactionsContext = createContext();
 
@@ -34,6 +35,37 @@ export const useTransactions = () => useContext(TransactionsContext);
 
 export const TransactionsProvider = ({ children, currentUser }) => {
   const getStorageKey = (key) => `@ControleFinanceiro_${currentUser.id}:${key}`;
+
+  const deleteFromCloud = (idsToDelete) => {
+    if (!Array.isArray(idsToDelete) || idsToDelete.length === 0) return;
+    try {
+      const pendingKey = getStorageKey('pendingDeletes');
+      const existing = JSON.parse(localStorage.getItem(pendingKey) || '[]');
+      const updated = Array.from(new Set([...existing, ...idsToDelete]));
+      localStorage.setItem(pendingKey, JSON.stringify(updated));
+
+      supabase
+        .from('transactions')
+        .delete()
+        .eq('user_id', currentUser.id)
+        .in('id', idsToDelete)
+        .then(({ error }) => {
+          if (error) {
+            console.error('Erro ao excluir transação na nuvem:', error);
+          } else {
+            const currentPending = JSON.parse(localStorage.getItem(pendingKey) || '[]');
+            const remaining = currentPending.filter(id => !idsToDelete.includes(id));
+            if (remaining.length > 0) {
+              localStorage.setItem(pendingKey, JSON.stringify(remaining));
+            } else {
+              localStorage.removeItem(pendingKey);
+            }
+          }
+        });
+    } catch (e) {
+      console.error('Erro ao registrar exclusão na nuvem:', e);
+    }
+  };
   const [transactions, setTransactions] = useState(() => {
     const saved = localStorage.getItem(getStorageKey('transactions'));
     if (saved) return JSON.parse(saved);
@@ -165,6 +197,8 @@ export const TransactionsProvider = ({ children, currentUser }) => {
 
   const deletePaymentMethod = (method, action = 'migrate', targetMethod = null) => {
     if (action === 'delete') {
+      const idsToDelete = transactions.filter(t => t.paymentMethod === method).map(t => t.id);
+      deleteFromCloud(idsToDelete);
       setTransactions(prev => prev.filter(t => t.paymentMethod !== method));
       setSettings(prev => ({
         ...prev,
@@ -287,6 +321,8 @@ export const TransactionsProvider = ({ children, currentUser }) => {
         fixedExpenses: (prev.fixedExpenses || []).map(fe => fe.category === name ? { ...fe, category: substituteCategoryName } : fe)
       }));
     } else {
+      const idsToDelete = transactions.filter(t => t.category === name).map(t => t.id);
+      deleteFromCloud(idsToDelete);
       setTransactions(prev => prev.filter(t => t.category !== name));
       
       // Delete fixed expenses tied to this category
@@ -447,17 +483,28 @@ export const TransactionsProvider = ({ children, currentUser }) => {
       del(txToDelete.attachmentKey).catch(console.error);
     }
 
+    let idsToDelete = [];
     if (txToDelete.groupId) {
       if (mode === 'single') {
+        idsToDelete = [id];
         setTransactions((prev) => prev.filter((t) => t.id !== id));
       } else if (mode === 'subsequent') {
+        idsToDelete = transactions
+          .filter((t) => t.groupId === txToDelete.groupId && t.currentInstallment >= txToDelete.currentInstallment)
+          .map((t) => t.id);
         setTransactions((prev) => prev.filter((t) => !(t.groupId === txToDelete.groupId && t.currentInstallment >= txToDelete.currentInstallment)));
       } else {
+        idsToDelete = transactions
+          .filter((t) => t.groupId === txToDelete.groupId)
+          .map((t) => t.id);
         setTransactions((prev) => prev.filter((t) => t.groupId !== txToDelete.groupId));
       }
     } else {
+      idsToDelete = [id];
       setTransactions((prev) => prev.filter((t) => t.id !== id));
     }
+
+    deleteFromCloud(idsToDelete);
   };
 
   const editTransaction = (id, updatedData, mode = 'single') => {
@@ -1169,6 +1216,7 @@ export const TransactionsProvider = ({ children, currentUser }) => {
     <TransactionsContext.Provider
       value={{
         transactions,
+        setTransactions,
         allTransactions,
         currentMonthTransactions,
         currentMonth,
@@ -1203,10 +1251,12 @@ export const TransactionsProvider = ({ children, currentUser }) => {
         getEffectiveMonth,
         openAttachment,
         categories,
+        setCategories,
         addCategory,
         updateCategory,
         deleteCategory,
         paymentMethods,
+        setPaymentMethods,
         addPaymentMethod,
         updatePaymentMethod,
         deletePaymentMethod,
