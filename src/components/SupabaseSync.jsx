@@ -87,50 +87,96 @@ const SupabaseSync = ({ currentUser, children }) => {
 
         const rawSettings = dbSettings?.settings || {};
         const importedKeys = rawSettings.importedKeys || [];
+        const newlyImportedKeys = [];
         let extraImportedTx = [];
 
-        if (currentUser?.email?.toLowerCase() === 'claudiacunhaleal28@gmail.com' && !importedKeys.includes('importedNov2026_PauloClaudia_v1') && !localStorage.getItem(getStorageKey('importedNov2026_PauloClaudia_v1'))) {
-          const items = [
-            { desc: "Revista Oeste Paulo", cat: "LAZER", pay: "CARTÃO SANTANDER", parcels: 6, val: 39.90 },
-            { desc: "Zerezes óculos Pri", cat: "DÍVIDA DE TERCEIROS", pay: "CARTÃO SANTANDER", parcels: 1, val: 172.90 },
-            { desc: "Shopee - Claudia", cat: "OUTROS", pay: "CARTÃO SANTANDER", parcels: 1, val: 145.14 },
-            { desc: "Yelumeg-Claudia", cat: "VESTUÁRIO", pay: "CARTÃO SANTANDER", parcels: 1, val: 224.22 },
-            { desc: "Presente Lucas-Claudia", cat: "PRESENTE", pay: "CARTÃO SANTANDER", parcels: 2, val: 90.62 },
-            { desc: "Shopee Claudia", cat: "OUTROS", pay: "CARTÃO SANTANDER", parcels: 1, val: 145.14 },
-            { desc: "Passagem Portugal-Claudia", cat: "LAZER", pay: "CARTÃO SANTANDER", parcels: 6, val: 660.32 },
-            { desc: "Revisão Polo", cat: "CARRO", pay: "CARTÃO SANTANDER", parcels: 2, val: 249.86 },
-            { desc: "beleza na Web", cat: "OUTROS", pay: "CARTÃO SANTANDER", parcels: 1, val: 86.64 },
-            { desc: "Brasil Paralelo", cat: "LAZER", pay: "CARTÃO INTER PAULO", parcels: 4, val: 129.00 },
-            { desc: "Drogaria Souza", cat: "SAÚDE", pay: "CARTÃO INTER PAULO", parcels: 1, val: 110.50 },
-            { desc: "Central Genéricos", cat: "SAÚDE", pay: "CARTÃO INTER PAULO", parcels: 1, val: 49.99 },
-            { desc: "Allianz Seguro", cat: "CARRO", pay: "CARTÃO INTER CLAUDIA", parcels: 7, val: 248.30 },
-            { desc: "San Raphael - Meg", cat: "CACHORROS", pay: "CARTÃO INTER CLAUDIA", parcels: 5, val: 329.33 }
-          ];
+        if (currentUser?.email?.toLowerCase() === 'claudiacunhaleal28@gmail.com') {
+          if (!importedKeys.includes('importedNov2026_PauloClaudia_v1') && !localStorage.getItem(getStorageKey('importedNov2026_PauloClaudia_v1'))) {
+            const items = [
+              { desc: "Revista Oeste Paulo", cat: "LAZER", pay: "CARTÃO SANTANDER", parcels: 6, val: 39.90 },
+              { desc: "Zerezes óculos Pri", cat: "DÍVIDA DE TERCEIROS", pay: "CARTÃO SANTANDER", parcels: 1, val: 172.90 },
+              { desc: "Shopee - Claudia", cat: "OUTROS", pay: "CARTÃO SANTANDER", parcels: 1, val: 145.14 },
+              { desc: "Yelumeg-Claudia", cat: "VESTUÁRIO", pay: "CARTÃO SANTANDER", parcels: 1, val: 224.22 },
+              { desc: "Presente Lucas-Claudia", cat: "PRESENTE", pay: "CARTÃO SANTANDER", parcels: 2, val: 90.62 },
+              { desc: "Shopee Claudia", cat: "OUTROS", pay: "CARTÃO SANTANDER", parcels: 1, val: 145.14 },
+              { desc: "Passagem Portugal-Claudia", cat: "LAZER", pay: "CARTÃO SANTANDER", parcels: 6, val: 660.32 },
+              { desc: "Revisão Polo", cat: "CARRO", pay: "CARTÃO SANTANDER", parcels: 2, val: 249.86 },
+              { desc: "beleza na Web", cat: "OUTROS", pay: "CARTÃO SANTANDER", parcels: 1, val: 86.64 },
+              { desc: "Brasil Paralelo", cat: "LAZER", pay: "CARTÃO INTER PAULO", parcels: 4, val: 129.00 },
+              { desc: "Drogaria Souza", cat: "SAÚDE", pay: "CARTÃO INTER PAULO", parcels: 1, val: 110.50 },
+              { desc: "Central Genéricos", cat: "SAÚDE", pay: "CARTÃO INTER PAULO", parcels: 1, val: 49.99 },
+              { desc: "Allianz Seguro", cat: "CARRO", pay: "CARTÃO INTER CLAUDIA", parcels: 7, val: 248.30 },
+              { desc: "San Raphael - Meg", cat: "CACHORROS", pay: "CARTÃO INTER CLAUDIA", parcels: 5, val: 329.33 }
+            ];
 
-          const baseDate = "2026-11-01";
-          items.forEach((item, idx) => {
-            const groupId = item.parcels > 1 ? uuidv5(`pc-nov26-grp-${idx}`, IMPORT_NAMESPACE) : null;
-            for (let i = 0; i < item.parcels; i++) {
-              extraImportedTx.push({
-                id: uuidv5(`pc-nov26-tx-${idx}-${i + 1}`, IMPORT_NAMESPACE),
-                groupId,
-                type: 'expense',
-                description: item.parcels > 1 ? `${item.desc} (${i + 1}/${item.parcels})` : item.desc,
-                amount: item.val,
-                originalDate: baseDate,
-                date: baseDate,
-                details: 'Importado de Nov/2026',
-                hasAttachment: false,
-                attachmentKey: null,
-                category: item.cat,
-                paymentMethod: item.pay,
-                source: '',
-                installmentsTotal: item.parcels,
-                currentInstallment: i + 1
-              });
-            }
-          });
-          localStorage.setItem(getStorageKey('importedNov2026_PauloClaudia_v1'), 'true');
+            const baseDate = "2026-11-01";
+            items.forEach((item, idx) => {
+              const groupId = item.parcels > 1 ? uuidv5(`pc-nov26-grp-${idx}`, IMPORT_NAMESPACE) : null;
+              for (let i = 0; i < item.parcels; i++) {
+                extraImportedTx.push({
+                  id: uuidv5(`pc-nov26-tx-${idx}-${i + 1}`, IMPORT_NAMESPACE),
+                  groupId,
+                  type: 'expense',
+                  description: item.parcels > 1 ? `${item.desc} (${i + 1}/${item.parcels})` : item.desc,
+                  amount: item.val,
+                  originalDate: baseDate,
+                  date: baseDate,
+                  details: 'Importado de Nov/2026',
+                  hasAttachment: false,
+                  attachmentKey: null,
+                  category: item.cat,
+                  paymentMethod: item.pay,
+                  source: '',
+                  installmentsTotal: item.parcels,
+                  currentInstallment: i + 1
+                });
+              }
+            });
+            localStorage.setItem(getStorageKey('importedNov2026_PauloClaudia_v1'), 'true');
+            newlyImportedKeys.push('importedNov2026_PauloClaudia_v1');
+          }
+
+          if (!importedKeys.includes('importedNov2026_PauloClaudia_v2') && !localStorage.getItem(getStorageKey('importedNov2026_PauloClaudia_v2'))) {
+            const itemsV2 = [
+              { desc: "2 Iphones paulo/Claudia", cat: "OUTROS", pay: "CARTÃO INTER CLAUDIA", parcels: 3, val: 1197.78 },
+              { desc: "Duo Gourmet", cat: "LAZER", pay: "CARTÃO INTER CLAUDIA", parcels: 6, val: 59.00 },
+              { desc: "Shopee", cat: "OUTROS", pay: "CARTÃO INTER CLAUDIA", parcels: 3, val: 100.27 },
+              { desc: "Superm.BH Claudia", cat: "MERCADO", pay: "CARTÃO INTER CLAUDIA", parcels: 1, val: 105.85 },
+              { desc: "Superm.BH Claudia", cat: "MERCADO", pay: "CARTÃO INTER CLAUDIA", parcels: 1, val: 84.26 },
+              { desc: "C.Bahia-filtro Pri", cat: "DÍVIDA DE TERCEIROS", pay: "CARTÃO CARREFOUR", parcels: 3, val: 65.64 },
+              { desc: "Anuidade", cat: "OUTROS", pay: "CARTÃO CARREFOUR", parcels: 5, val: 16.99 },
+              { desc: "San Raphael - Meg", cat: "CACHORROS", pay: "CARTÃO CARREFOUR", parcels: 3, val: 418.08 },
+              { desc: "Superm.BH Claudia", cat: "MERCADO", pay: "CARTÃO INTER CLAUDIA", parcels: 1, val: 121.67 },
+              { desc: "Lojas Duque", cat: "CASA", pay: "CARTÃO INTER PAULO", parcels: 1, val: 118.38 },
+              { desc: "Lizie - Pri", cat: "DÍVIDA DE TERCEIROS", pay: "CARTÃO SANTANDER", parcels: 4, val: 166.50 }
+            ];
+
+            const baseDate = "2026-11-01";
+            itemsV2.forEach((item, idx) => {
+              const groupId = item.parcels > 1 ? uuidv5(`pc-nov26-v2-grp-${idx}`, IMPORT_NAMESPACE) : null;
+              for (let i = 0; i < item.parcels; i++) {
+                extraImportedTx.push({
+                  id: uuidv5(`pc-nov26-v2-tx-${idx}-${i + 1}`, IMPORT_NAMESPACE),
+                  groupId,
+                  type: 'expense',
+                  description: item.parcels > 1 ? `${item.desc} (${i + 1}/${item.parcels})` : item.desc,
+                  amount: item.val,
+                  originalDate: baseDate,
+                  date: baseDate,
+                  details: 'Importado de Nov/2026 (Parte 2)',
+                  hasAttachment: false,
+                  attachmentKey: null,
+                  category: item.cat,
+                  paymentMethod: item.pay,
+                  source: '',
+                  installmentsTotal: item.parcels,
+                  currentInstallment: i + 1
+                });
+              }
+            });
+            localStorage.setItem(getStorageKey('importedNov2026_PauloClaudia_v2'), 'true');
+            newlyImportedKeys.push('importedNov2026_PauloClaudia_v2');
+          }
         }
 
         let hasCloudData = filteredDbTransactions.length > 0 || !!dbSettings;
@@ -193,8 +239,8 @@ const SupabaseSync = ({ currentUser, children }) => {
           localStorage.setItem(getStorageKey('transactions'), JSON.stringify(localTransactions));
           
           const { paidItems: _unused, categories: cloudCats, paymentMethods: cloudMethods, ...cleanSettings } = rawSettings;
-          if (extraImportedTx.length > 0) {
-            cleanSettings.importedKeys = Array.from(new Set([...(cleanSettings.importedKeys || []), 'importedNov2026_PauloClaudia_v1']));
+          if (newlyImportedKeys.length > 0) {
+            cleanSettings.importedKeys = Array.from(new Set([...(cleanSettings.importedKeys || []), ...newlyImportedKeys]));
           }
           if (Object.keys(cleanSettings).length > 0) {
             localStorage.setItem(getStorageKey('settings'), JSON.stringify(cleanSettings));
@@ -217,6 +263,11 @@ const SupabaseSync = ({ currentUser, children }) => {
             finalPaymentMethods = cloudMethods;
           } else if (dbPaymentMethods && dbPaymentMethods.length > 0) {
             finalPaymentMethods = dbPaymentMethods.map(m => m.name);
+          }
+          if (extraImportedTx.length > 0) {
+            const baseMethods = finalPaymentMethods || contextRef.current?.paymentMethods || [];
+            const importedMethods = Array.from(new Set(extraImportedTx.map(t => t.paymentMethod).filter(Boolean)));
+            finalPaymentMethods = Array.from(new Set([...baseMethods, ...importedMethods]));
           }
           if (finalPaymentMethods) {
             localStorage.setItem(getStorageKey('paymentMethods'), JSON.stringify(finalPaymentMethods));
@@ -275,12 +326,20 @@ const SupabaseSync = ({ currentUser, children }) => {
                 if (txErr) throw new Error('Transações: ' + txErr.message);
               }
 
+              const baseMethods = currentCtx.paymentMethods || [];
+              const importedMethods = Array.from(new Set(extraImportedTx.map(t => t.paymentMethod).filter(Boolean)));
+              const mergedMethods = Array.from(new Set([...baseMethods, ...importedMethods]));
+              if (extraImportedTx.length > 0 && currentCtx?.setPaymentMethods) {
+                currentCtx.setPaymentMethods(mergedMethods);
+                localStorage.setItem(getStorageKey('paymentMethods'), JSON.stringify(mergedMethods));
+              }
+
               const settingsToPush = {
                 ...(currentCtx.settings || {}),
-                ...(extraImportedTx.length > 0 ? { importedKeys: ['importedNov2026_PauloClaudia_v1'] } : {}),
+                ...(newlyImportedKeys.length > 0 ? { importedKeys: Array.from(new Set([...(currentCtx.settings?.importedKeys || []), ...newlyImportedKeys])) } : {}),
                 paidItems: currentCtx.paidItems || {},
                 categories: currentCtx.categories || [],
-                paymentMethods: currentCtx.paymentMethods || []
+                paymentMethods: mergedMethods
               };
               const { error: stgErr } = await supabase.from('user_settings').upsert({ user_id: currentUser.id, settings: settingsToPush });
               if (stgErr) throw new Error('Settings: ' + stgErr.message);
