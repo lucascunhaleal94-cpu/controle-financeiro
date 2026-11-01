@@ -8,6 +8,7 @@ const Notifications = () => {
   const { 
     allTransactions, 
     getEffectiveMonth, 
+    getCardDueDay,
     paidItems, 
     togglePaidStatus, 
     settings, 
@@ -80,9 +81,7 @@ const Notifications = () => {
         const notifId = `notif-card-${card}-${effMonth}`;
         
         if (!isPaid && amount > 0 && !ignored.includes(notifId)) {
-          const dueDay = settings.dueDays?.overrides?.[effMonth]?.[card] 
-                      ?? settings.dueDays?.default?.[card] 
-                      ?? 10;
+          const dueDay = getCardDueDay(card, effMonth);
           
           const dueDayStr = String(dueDay).padStart(2, '0');
           const dueDate = parseISO(`${effMonth}-${dueDayStr}`);
@@ -109,7 +108,7 @@ const Notifications = () => {
     notifs.sort((a, b) => a.diff - b.diff);
     setNotifications(notifs);
 
-  }, [allTransactions, paidItems, settings, getEffectiveMonth]);
+  }, [allTransactions, paidItems, settings, getEffectiveMonth, getCardDueDay]);
 
   const handleMarkAsPaid = (monthStr, itemId) => {
     togglePaidStatus(monthStr, itemId);

@@ -387,6 +387,102 @@ export const TransactionsProvider = ({ children, currentUser }) => {
     });
   };
 
+  const getCardClosingDay = (card, month = currentMonth) => {
+    const overrides = settings.closingDays?.overrides || {};
+    if (overrides[month]?.[card] !== undefined) {
+      return overrides[month][card];
+    }
+    const priorMonths = Object.keys(overrides)
+      .filter(m => m < month && overrides[m]?.[card] !== undefined)
+      .sort();
+    if (priorMonths.length > 0) {
+      return overrides[priorMonths[priorMonths.length - 1]][card];
+    }
+    return settings.closingDays?.default?.[card] ?? 10;
+  };
+
+  const getCardDueDay = (card, month = currentMonth) => {
+    const overrides = settings.dueDays?.overrides || {};
+    if (overrides[month]?.[card] !== undefined) {
+      return overrides[month][card];
+    }
+    const priorMonths = Object.keys(overrides)
+      .filter(m => m < month && overrides[m]?.[card] !== undefined)
+      .sort();
+    if (priorMonths.length > 0) {
+      return overrides[priorMonths[priorMonths.length - 1]][card];
+    }
+    return settings.dueDays?.default?.[card] ?? 21;
+  };
+
+  const updateCardClosingDay = (card, day, fromMonth = currentMonth) => {
+    const parsedDay = parseInt(day) || 1;
+    setSettings(prev => {
+      const currentOverrides = { ...(prev.closingDays?.overrides || {}) };
+      const updatedOverrides = {};
+
+      Object.keys(currentOverrides).forEach(m => {
+        if (m < fromMonth) {
+          updatedOverrides[m] = { ...currentOverrides[m] };
+        } else if (m === fromMonth) {
+          updatedOverrides[m] = { ...(currentOverrides[m] || {}), [card]: parsedDay };
+        } else {
+          const copy = { ...(currentOverrides[m] || {}) };
+          delete copy[card];
+          if (Object.keys(copy).length > 0) {
+            updatedOverrides[m] = copy;
+          }
+        }
+      });
+
+      if (!updatedOverrides[fromMonth]) {
+        updatedOverrides[fromMonth] = { [card]: parsedDay };
+      }
+
+      return {
+        ...prev,
+        closingDays: {
+          ...(prev.closingDays || { default: {} }),
+          overrides: updatedOverrides
+        }
+      };
+    });
+  };
+
+  const updateCardDueDay = (card, day, fromMonth = currentMonth) => {
+    const parsedDay = parseInt(day) || 1;
+    setSettings(prev => {
+      const currentOverrides = { ...(prev.dueDays?.overrides || {}) };
+      const updatedOverrides = {};
+
+      Object.keys(currentOverrides).forEach(m => {
+        if (m < fromMonth) {
+          updatedOverrides[m] = { ...currentOverrides[m] };
+        } else if (m === fromMonth) {
+          updatedOverrides[m] = { ...(currentOverrides[m] || {}), [card]: parsedDay };
+        } else {
+          const copy = { ...(currentOverrides[m] || {}) };
+          delete copy[card];
+          if (Object.keys(copy).length > 0) {
+            updatedOverrides[m] = copy;
+          }
+        }
+      });
+
+      if (!updatedOverrides[fromMonth]) {
+        updatedOverrides[fromMonth] = { [card]: parsedDay };
+      }
+
+      return {
+        ...prev,
+        dueDays: {
+          ...(prev.dueDays || { default: {} }),
+          overrides: updatedOverrides
+        }
+      };
+    });
+  };
+
   const getEffectiveMonth = (t) => {
     const baseDate = t.date || t.originalDate;
     if (!baseDate) return currentMonth;
@@ -399,9 +495,7 @@ export const TransactionsProvider = ({ children, currentUser }) => {
     const purchaseMonth = format(originalDateObj, 'yyyy-MM');
     const day = originalDateObj.getDate();
 
-    const closingDay = settings.closingDays?.overrides?.[purchaseMonth]?.[t.paymentMethod] 
-                    ?? settings.closingDays?.default?.[t.paymentMethod] 
-                    ?? 10;
+    const closingDay = getCardClosingDay(t.paymentMethod, purchaseMonth);
 
     let effectiveDate = originalDateObj;
     if (day > closingDay) {
@@ -704,9 +798,7 @@ export const TransactionsProvider = ({ children, currentUser }) => {
         }
       } else if (t.paymentMethod && t.paymentMethod.startsWith('CARTÃO')) {
         // credit card due date
-        const dueDay = settings.dueDays?.overrides?.[effMonth]?.[t.paymentMethod] 
-                    ?? settings.dueDays?.default?.[t.paymentMethod] 
-                    ?? 10;
+        const dueDay = getCardDueDay(t.paymentMethod, effMonth);
         computedDueDate = `${effMonth}-${String(dueDay).padStart(2, '0')}`;
       }
     }
@@ -1249,6 +1341,10 @@ export const TransactionsProvider = ({ children, currentUser }) => {
         setPaidItems,
         togglePaidStatus,
         getEffectiveMonth,
+        getCardClosingDay,
+        getCardDueDay,
+        updateCardClosingDay,
+        updateCardDueDay,
         openAttachment,
         categories,
         setCategories,

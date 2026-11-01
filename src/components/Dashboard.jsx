@@ -86,7 +86,8 @@ const Dashboard = () => {
     settings,
     allTransactions,
     categories,
-    getEffectiveMonth
+    getEffectiveMonth,
+    getCardDueDay
   } = useTransactions();
 
   const [expandedCategories, setExpandedCategories] = useState({});
@@ -123,9 +124,7 @@ const Dashboard = () => {
       let txDay = 1;
       
       if (t.paymentMethod && t.paymentMethod.startsWith('CARTÃO')) {
-        const dueDay = settings?.dueDays?.overrides?.[currentMonth]?.[t.paymentMethod] 
-                    ?? settings?.dueDays?.default?.[t.paymentMethod] 
-                    ?? 10;
+        const dueDay = getCardDueDay(t.paymentMethod, currentMonth);
         txDay = parseInt(dueDay);
       } else {
         const dateStr = t.originalDate || t.date;

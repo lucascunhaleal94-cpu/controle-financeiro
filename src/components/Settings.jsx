@@ -10,7 +10,7 @@ const formatCurrency = (value) => {
 };
 
 const Settings = () => {
-  const { settings, updateSettings, currentMonth, addFixedExpense, removeFixedExpense, editFixedExpense, categories, paymentMethods, exportBackup, importBackup, clearIgnoredNotifications, updateIncomeSource, deleteIncomeSource } = useTransactions();
+  const { settings, updateSettings, currentMonth, addFixedExpense, removeFixedExpense, editFixedExpense, categories, paymentMethods, exportBackup, importBackup, clearIgnoredNotifications, updateIncomeSource, deleteIncomeSource, getCardClosingDay, getCardDueDay, updateCardClosingDay, updateCardDueDay } = useTransactions();
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   
   const [incomeName, setIncomeName] = useState('');
@@ -49,35 +49,11 @@ const Settings = () => {
   };
 
   const handleClosingDayChange = (card, day) => {
-    const parsedDay = parseInt(day) || 1;
-    updateSettings({
-      closingDays: {
-        ...settings.closingDays,
-        overrides: {
-          ...settings.closingDays.overrides,
-          [currentMonth]: {
-            ...(settings.closingDays.overrides?.[currentMonth] || {}),
-            [card]: parsedDay
-          }
-        }
-      }
-    });
+    updateCardClosingDay(card, day, currentMonth);
   };
 
   const handleDueDayChange = (card, day) => {
-    const parsedDay = parseInt(day) || 1;
-    updateSettings({
-      dueDays: {
-        ...(settings.dueDays || { default: {}, overrides: {} }),
-        overrides: {
-          ...(settings.dueDays?.overrides || {}),
-          [currentMonth]: {
-            ...(settings.dueDays?.overrides?.[currentMonth] || {}),
-            [card]: parsedDay
-          }
-        }
-      }
-    });
+    updateCardDueDay(card, day, currentMonth);
   };
 
   const handleAddOrEditFixedExpense = (e) => {
@@ -283,7 +259,7 @@ const Settings = () => {
               const method = e.target.value;
               setPay(method);
               if (method.startsWith('CARTÃO')) {
-                const defaultDue = settings.dueDays?.default?.[method] || 10;
+                const defaultDue = getCardDueDay(method, currentMonth);
                 setDue(String(defaultDue));
               }
             }}>
@@ -350,7 +326,7 @@ const Settings = () => {
           <button className="btn btn-secondary" style={{ marginLeft: 'auto', padding: '0.25rem 0.75rem', fontSize: '0.85rem' }} onClick={() => setShowPaymentModal(true)}>Gerenciar Cartões</button>
         </div>
         <p className="text-muted mb-6" style={{ fontSize: '0.9rem' }}>
-          Altere as datas especificamente para as faturas de <strong>{monthName}</strong>.
+          Altere as datas para as faturas de <strong>{monthName}</strong> e meses seguintes (meses anteriores não são afetados).
         </p>
         
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
@@ -363,8 +339,8 @@ const Settings = () => {
           </thead>
           <tbody>
             {creditCards.map(card => {
-              const currentClose = settings.closingDays?.overrides?.[currentMonth]?.[card] ?? settings.closingDays?.default?.[card] ?? 10;
-              const currentDue = settings.dueDays?.overrides?.[currentMonth]?.[card] ?? settings.dueDays?.default?.[card] ?? 21;
+              const currentClose = getCardClosingDay(card, currentMonth);
+              const currentDue = getCardDueDay(card, currentMonth);
               return (
                 <tr key={card} style={{ borderBottom: '1px solid var(--border-color)' }}>
                   <td style={{ padding: '1rem 0' }}>{card}</td>
