@@ -3,6 +3,9 @@
 :root {
   /* Color Palette - Dark Theme */
   --bg-color: #0f172a; /* Slate 900 */
+  --bg-main: #0f172a; /* Slate 900 */
+  --bg-card: #1e293b; /* Slate 800 */
+  --bg-secondary: #1e293b; /* Slate 800 */
   --surface-color: #1e293b; /* Slate 800 */
   --surface-hover: #334155; /* Slate 700 */
   
@@ -11,6 +14,7 @@
   
   --income-color: #10b981; /* Emerald 500 */
   --expense-color: #ef4444; /* Red 500 */
+  --danger-color: #ef4444; /* Red 500 */
   --warning-color: #f59e0b; /* Amber 500 */
   
   --text-main: #f8fafc; /* Slate 50 */

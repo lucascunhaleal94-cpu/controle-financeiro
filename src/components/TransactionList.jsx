@@ -20,10 +20,11 @@ const MultiSelectFilter = ({ options, selected, onChange, placeholder = "Filtrar
       <div 
         onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }}
         style={{ 
-          width: '100%', padding: '0.2rem 0.5rem', fontSize: '0.8rem', borderRadius: '4px', 
-          border: '1px solid var(--border-color)', background: 'transparent', color: 'inherit',
+          width: '100%', padding: '0.25rem 0.5rem', fontSize: '0.8rem', borderRadius: '6px', 
+          border: isOpen || selected.length > 0 ? '1px solid var(--primary-color)' : '1px solid var(--border-color)',
+          backgroundColor: '#0f172a', color: selected.length > 0 ? 'var(--text-main)' : 'var(--text-muted)',
           display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer',
-          minHeight: '26px'
+          minHeight: '28px', fontWeight: selected.length > 0 ? '600' : '400'
         }}
       >
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -41,11 +42,13 @@ const MultiSelectFilter = ({ options, selected, onChange, placeholder = "Filtrar
           <div 
             onClick={(e) => e.stopPropagation()}
             style={{ 
-              position: 'absolute', top: '100%', left: 0, zIndex: 50, 
-              background: 'var(--bg-card)', border: '1px solid var(--border-color)', 
-              borderRadius: '4px', marginTop: '4px', width: 'max-content', minWidth: '100%', maxWidth: '250px',
-              boxShadow: '0 4px 6px rgba(0,0,0,0.3)', padding: '0.5rem',
-              maxHeight: '250px', display: 'flex', flexDirection: 'column'
+              position: 'absolute', top: '100%', left: 0, zIndex: 100, 
+              backgroundColor: '#0f172a', border: '1px solid #475569', 
+              borderRadius: '8px', marginTop: '6px', width: 'max-content', minWidth: '220px', maxWidth: '380px',
+              boxShadow: '0 12px 28px -4px rgba(0, 0, 0, 0.85), 0 4px 12px -2px rgba(0, 0, 0, 0.6)',
+              padding: '0.65rem',
+              maxHeight: '320px', display: 'flex', flexDirection: 'column',
+              color: '#f8fafc', textAlign: 'left', fontWeight: '400'
             }}
           >
             <div style={{ marginBottom: '0.5rem' }}>
@@ -54,17 +57,26 @@ const MultiSelectFilter = ({ options, selected, onChange, placeholder = "Filtrar
                 placeholder="Buscar..." 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                style={{ width: '100%', padding: '0.2rem', fontSize: '0.8rem', borderRadius: '2px', border: '1px solid var(--border-color)', background: 'var(--bg-main)', color: 'var(--text-main)' }}
+                style={{ 
+                  width: '100%', padding: '0.4rem 0.6rem', fontSize: '0.82rem', borderRadius: '6px', 
+                  border: '1px solid #475569', backgroundColor: '#1e293b', color: '#f8fafc',
+                  outline: 'none'
+                }}
               />
             </div>
-            <div style={{ overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <div style={{ overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
               {filteredOptions.length === 0 ? (
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Nenhum encontrado</span>
+                <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)', padding: '0.35rem 0.4rem' }}>Nenhum encontrado</span>
               ) : (
                 <>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap', borderBottom: '1px solid var(--border-color)', paddingBottom: '4px', marginBottom: '4px' }}>
+                  <label style={{ 
+                    display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', 
+                    fontWeight: '600', color: '#e2e8f0', cursor: 'pointer', whiteSpace: 'nowrap', 
+                    borderBottom: '1px solid #334155', padding: '0.35rem 0.4rem 0.5rem 0.4rem', marginBottom: '0.25rem' 
+                  }}>
                     <input 
                       type="checkbox"
+                      style={{ width: '15px', height: '15px', accentColor: 'var(--primary-color)', cursor: 'pointer', flexShrink: 0 }}
                       checked={selected.length === options.length && options.length > 0}
                       onChange={(e) => {
                         if (e.target.checked) onChange([...options]);
@@ -73,22 +85,39 @@ const MultiSelectFilter = ({ options, selected, onChange, placeholder = "Filtrar
                     />
                     (Selecionar todos)
                   </label>
-                  {filteredOptions.map(opt => (
-                    <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                      <input 
-                        type="checkbox" 
-                        checked={selected.includes(opt)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            onChange([...selected, opt]);
-                          } else {
-                            onChange(selected.filter(x => x !== opt));
-                          }
+                  {filteredOptions.map(opt => {
+                    const isChecked = selected.includes(opt);
+                    return (
+                      <label 
+                        key={opt} 
+                        style={{ 
+                          display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', 
+                          color: isChecked ? '#60a5fa' : '#f8fafc',
+                          fontWeight: isChecked ? '600' : '400',
+                          backgroundColor: isChecked ? 'rgba(59, 130, 246, 0.12)' : 'transparent',
+                          padding: '0.35rem 0.4rem', borderRadius: '4px',
+                          cursor: 'pointer', whiteSpace: 'nowrap',
+                          transition: 'background-color 0.15s ease'
                         }}
-                      />
-                      {opt}
-                    </label>
-                  ))}
+                        onMouseEnter={(e) => { if (!isChecked) e.currentTarget.style.backgroundColor = '#1e293b'; }}
+                        onMouseLeave={(e) => { if (!isChecked) e.currentTarget.style.backgroundColor = 'transparent'; }}
+                      >
+                        <input 
+                          type="checkbox" 
+                          style={{ width: '15px', height: '15px', accentColor: 'var(--primary-color)', cursor: 'pointer', flexShrink: 0 }}
+                          checked={isChecked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              onChange([...selected, opt]);
+                            } else {
+                              onChange(selected.filter(x => x !== opt));
+                            }
+                          }}
+                        />
+                        {opt}
+                      </label>
+                    );
+                  })}
                 </>
               )}
             </div>
