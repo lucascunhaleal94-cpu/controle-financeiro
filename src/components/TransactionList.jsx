@@ -77,10 +77,14 @@ const MultiSelectFilter = ({ options, selected, onChange, placeholder = "Filtrar
                     <input 
                       type="checkbox"
                       style={{ width: '15px', height: '15px', accentColor: 'var(--primary-color)', cursor: 'pointer', flexShrink: 0 }}
-                      checked={selected.length === options.length && options.length > 0}
+                      checked={filteredOptions.length > 0 && filteredOptions.every(opt => selected.includes(opt))}
                       onChange={(e) => {
-                        if (e.target.checked) onChange([...options]);
-                        else onChange([]);
+                        if (e.target.checked) {
+                          const merged = Array.from(new Set([...selected, ...filteredOptions]));
+                          onChange(merged);
+                        } else {
+                          onChange(selected.filter(x => !filteredOptions.includes(x)));
+                        }
                       }}
                     />
                     (Selecionar todos)
@@ -181,76 +185,69 @@ const safeFormatDate = (dateString, formatStr) => {
     return "A VENCER";
   };
 
-  const uniqueValues = useMemo(() => {
-    const vals = {
-      description: new Set(),
-      date: new Set(),
-      dueDate: new Set(),
-      category: new Set(),
-      paymentMethod: new Set(),
-      amount: new Set(),
-      status: new Set()
-    };
-    
-    currentMonthTransactions.forEach(t => {
-      if (t.description) vals.description.add(t.description);
-      const dDate = safeFormatDate(t.date || t.originalDate, "dd 'de' MMM");
-      if (dDate !== '-') vals.date.add(dDate);
-      if (t.computedDueDate) {
-        const dDue = safeFormatDate(t.computedDueDate, "dd 'de' MMM");
-        if (dDue !== '-') vals.dueDate.add(dDue);
+  const filterKeys = useMemo(() => ['description', 'date', 'dueDate', 'category', 'paymentMethod', 'amount', 'status'], []);
+
+  const getTransactionFieldValue = useCallback((t, key) => {
+    switch (key) {
+      case 'description':
+        return t.description || '';
+      case 'date': {
+        const dDate = safeFormatDate(t.date || t.originalDate, "dd 'de' MMM");
+        return dDate !== '-' ? dDate : '';
       }
-      const cat = t.category || t.source || '';
-      if (cat) vals.category.add(cat);
-      if (t.paymentMethod) vals.paymentMethod.add(t.paymentMethod);
-      if (t.amount != null) vals.amount.add(formatCurrency(t.amount));
-      vals.status.add(getTransactionStatusText(t));
+      case 'dueDate': {
+        if (!t.computedDueDate) return '';
+        const dDue = safeFormatDate(t.computedDueDate, "dd 'de' MMM");
+        return dDue !== '-' ? dDue : '';
+      }
+      case 'category':
+        return t.category || t.source || '';
+      case 'paymentMethod':
+        return t.paymentMethod || '';
+      case 'amount':
+        return t.amount != null ? formatCurrency(t.amount) : '';
+      case 'status':
+        return getTransactionStatusText(t);
+      default:
+        return '';
+    }
+  }, []);
+
+  const uniqueValues = useMemo(() => {
+    const result = {};
+
+    filterKeys.forEach((targetKey) => {
+      const vals = new Set();
+
+      const matchingTransactions = currentMonthTransactions.filter((t) =>
+        filterKeys.every((otherKey) => {
+          if (otherKey === targetKey) return true;
+          const activeSelected = filters[otherKey];
+          if (!activeSelected || activeSelected.length === 0) return true;
+          const val = getTransactionFieldValue(t, otherKey);
+          return activeSelected.includes(val);
+        })
+      );
+
+      matchingTransactions.forEach((t) => {
+        const val = getTransactionFieldValue(t, targetKey);
+        if (val) vals.add(val);
+      });
+
+      result[targetKey] = Array.from(vals).sort();
     });
 
-    return {
-      description: Array.from(vals.description).sort(),
-      date: Array.from(vals.date).sort(),
-      dueDate: Array.from(vals.dueDate).sort(),
-      category: Array.from(vals.category).sort(),
-      paymentMethod: Array.from(vals.paymentMethod).sort(),
-      amount: Array.from(vals.amount).sort(),
-      status: Array.from(vals.status).sort()
-    };
-  }, [currentMonthTransactions]);
+    return result;
+  }, [currentMonthTransactions, filters, getTransactionFieldValue]);
 
   const processedTransactions = useMemo(() => {
-    let result = [...currentMonthTransactions];
-
-    if (filters.description.length > 0) {
-      result = result.filter(t => filters.description.includes(t.description));
-    }
-    if (filters.category.length > 0) {
-      result = result.filter(t => filters.category.includes(t.category || t.source || ''));
-    }
-    if (filters.paymentMethod.length > 0) {
-      result = result.filter(t => filters.paymentMethod.includes(t.paymentMethod || ''));
-    }
-    if (filters.amount.length > 0) {
-      result = result.filter(t => filters.amount.includes(formatCurrency(t.amount)));
-    }
-    if (filters.date.length > 0) {
-      result = result.filter(t => {
-        const displayDate = t.date || t.originalDate;
-        const formatted = safeFormatDate(displayDate, "dd 'de' MMM");
-        return filters.date.includes(formatted);
-      });
-    }
-    if (filters.dueDate.length > 0) {
-      result = result.filter(t => {
-        if (!t.computedDueDate) return false;
-        const formatted = safeFormatDate(t.computedDueDate, "dd 'de' MMM");
-        return filters.dueDate.includes(formatted);
-      });
-    }
-
-    if (filters.status.length > 0) {
-      result = result.filter(t => filters.status.includes(getTransactionStatusText(t)));
-    }
+    let result = currentMonthTransactions.filter((t) =>
+      filterKeys.every((key) => {
+        const activeSelected = filters[key];
+        if (!activeSelected || activeSelected.length === 0) return true;
+        return activeSelected.includes(getTransactionFieldValue(t, key));
+      })
+    );
 
     if (sortConfig) {
       result.sort((a, b) => {
@@ -291,7 +288,7 @@ const safeFormatDate = (dateString, formatStr) => {
     }
 
     return result;
-  }, [currentMonthTransactions, sortConfig, filters]);
+  }, [currentMonthTransactions, sortConfig, filters, filterKeys, getTransactionFieldValue]);
 
   const handleSort = (key) => {
     let direction = 'asc';
@@ -302,7 +299,28 @@ const safeFormatDate = (dateString, formatStr) => {
   };
 
   const handleFilterChange = (key, value) => {
-    setFilters(prev => ({ ...prev, [key]: value }));
+    setFilters(prev => {
+      const next = { ...prev, [key]: value };
+      filterKeys.forEach(otherKey => {
+        if (otherKey === key || !next[otherKey] || next[otherKey].length === 0) return;
+        const validForOther = new Set();
+        currentMonthTransactions.forEach(t => {
+          const matchesAllExceptOther = filterKeys.every(k => {
+            if (k === otherKey || !next[k] || next[k].length === 0) return true;
+            return next[k].includes(getTransactionFieldValue(t, k));
+          });
+          if (matchesAllExceptOther) {
+            const val = getTransactionFieldValue(t, otherKey);
+            if (val) validForOther.add(val);
+          }
+        });
+        const pruned = next[otherKey].filter(v => validForOther.has(v));
+        if (pruned.length !== next[otherKey].length) {
+          next[otherKey] = pruned;
+        }
+      });
+      return next;
+    });
   };
 
   const SortIcon = ({ columnKey }) => {
