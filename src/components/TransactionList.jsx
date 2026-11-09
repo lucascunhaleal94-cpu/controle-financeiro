@@ -337,7 +337,7 @@ const safeFormatDate = (dateString, formatStr) => {
     selectedTx.forEach(txId => {
       const t = currentMonthTransactions.find(x => x.id === txId);
       if (t && !t.isPaid) {
-        const effMonth = t.overrideMonth || (getEffectiveMonth ? getEffectiveMonth(t) : currentMonth);
+        const effMonth = getEffectiveMonth ? getEffectiveMonth(t) : (t.overrideMonth || currentMonth);
         if (t.isFixedExpense) {
           togglePaidStatus(effMonth, t.baseId);
         } else {
@@ -355,11 +355,21 @@ const safeFormatDate = (dateString, formatStr) => {
   };
 
   const executeTogglePaid = useCallback((t) => {
-    const effMonth = t.overrideMonth || (getEffectiveMonth ? getEffectiveMonth(t) : currentMonth);
+    const effMonth = getEffectiveMonth ? getEffectiveMonth(t) : (t.overrideMonth || currentMonth);
+    const isCardPaid = t.paymentMethod?.startsWith('CARTÃO') && paidItems[effMonth]?.[t.paymentMethod];
+
     if (t.isFixedExpense) {
-      togglePaidStatus(effMonth, t.baseId);
+      if (isCardPaid) {
+        if (window.confirm(`A fatura inteira do ${t.paymentMethod} está marcada como paga. Para alterar itens individualmente, deseja desmarcar o pagamento total da fatura (deixando os demais itens pendentes)?`)) {
+          togglePaidStatus(effMonth, t.paymentMethod);
+        }
+      } else {
+        togglePaidStatus(effMonth, t.baseId);
+        if (t.overrideMonth && t.overrideMonth !== effMonth && paidItems[t.overrideMonth]?.[t.baseId]) {
+          togglePaidStatus(t.overrideMonth, t.baseId);
+        }
+      }
     } else {
-      const isCardPaid = t.paymentMethod?.startsWith('CARTÃO') && paidItems[effMonth]?.[t.paymentMethod];
       if (isCardPaid) {
         if (window.confirm(`A fatura inteira do ${t.paymentMethod} está marcada como paga. Para alterar itens individualmente, deseja desmarcar o pagamento total da fatura (deixando os demais itens pendentes)?`)) {
           togglePaidStatus(effMonth, t.paymentMethod);

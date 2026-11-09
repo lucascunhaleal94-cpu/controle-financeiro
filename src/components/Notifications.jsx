@@ -37,19 +37,28 @@ const Notifications = () => {
     // 1. Processar Despesas Fixas Recorrentes
     const fixedExpenses = allTransactions.filter(t => t.isFixedExpense);
     fixedExpenses.forEach(fe => {
-      const monthStr = fe.overrideMonth;
-      const isPaid = paidItems[monthStr]?.[fe.baseId];
-      const notifId = `notif-fe-${fe.baseId}-${monthStr}`;
+      const effMonth = getEffectiveMonth(fe);
+      const isCardExpense = fe.paymentMethod?.startsWith('CARTÃO');
+      const cardPaid = isCardExpense ? (paidItems[effMonth]?.[fe.paymentMethod] || false) : false;
+      const isPaid = paidItems[effMonth]?.[fe.baseId] || paidItems[fe.overrideMonth]?.[fe.baseId] || cardPaid || false;
+      const notifId = `notif-fe-${fe.baseId}-${effMonth}`;
+      const legacyNotifId = `notif-fe-${fe.baseId}-${fe.overrideMonth}`;
       
-      if (!isPaid && !ignored.includes(notifId)) {
-        const dueDate = parseISO(fe.date);
+      if (!isPaid && !ignored.includes(notifId) && !ignored.includes(legacyNotifId)) {
+        const baseFe = (settings?.fixedExpenses || []).find(f => f.id === fe.baseId);
+        let dueDay = baseFe?.dueDate;
+        if (!dueDay) {
+          dueDay = isCardExpense ? getCardDueDay(fe.paymentMethod, effMonth) : parseISO(fe.date).getDate();
+        }
+        const dueDayStr = String(dueDay).padStart(2, '0');
+        const dueDate = parseISO(`${effMonth}-${dueDayStr}`);
         const diff = differenceInDays(dueDate, today);
         
         if (diff <= 2) {
           notifs.push({
             id: notifId,
             title: fe.description,
-            monthStr,
+            monthStr: effMonth,
             itemId: fe.baseId,
             type: 'fixed_expense',
             amount: fe.amount,
@@ -62,16 +71,19 @@ const Notifications = () => {
     });
 
     // 2. Processar Faturas de Cartão de Crédito
-    // Agrupar despesas por cartão e mês efetivo
+    // Agrupar despesas pendentes por cartão e mês efetivo
     const cardExpenses = allTransactions.filter(t => t.type === 'expense' && !t.isFixedExpense && t.paymentMethod?.startsWith('CARTÃO'));
     
     const invoices = {}; // { '2026-09': { 'CARTÃO NUBANK': 1500 } }
     
     cardExpenses.forEach(t => {
       const effMonth = getEffectiveMonth(t);
-      if (!invoices[effMonth]) invoices[effMonth] = {};
-      if (!invoices[effMonth][t.paymentMethod]) invoices[effMonth][t.paymentMethod] = 0;
-      invoices[effMonth][t.paymentMethod] += t.amount;
+      const isItemPaid = paidItems[effMonth]?.[t.id] || paidItems[effMonth]?.[t.paymentMethod] || false;
+      if (!isItemPaid) {
+        if (!invoices[effMonth]) invoices[effMonth] = {};
+        if (!invoices[effMonth][t.paymentMethod]) invoices[effMonth][t.paymentMethod] = 0;
+        invoices[effMonth][t.paymentMethod] += t.amount;
+      }
     });
 
     Object.keys(invoices).forEach(effMonth => {
@@ -102,6 +114,37 @@ const Notifications = () => {
           }
         }
       });
+    });
+
+    // 3. Processar Outras Despesas (ex: DINHEIRO/PIX) com vencimento próximo
+    const otherExpenses = allTransactions.filter(t => t.type === 'expense' && !t.isFixedExpense && !t.paymentMethod?.startsWith('CARTÃO'));
+    otherExpenses.forEach(t => {
+      const effMonth = getEffectiveMonth(t);
+      const isPaid = paidItems[effMonth]?.[t.id] || false;
+      const notifId = `notif-tx-${t.id}`;
+
+      if (!isPaid && !ignored.includes(notifId)) {
+        const dueDateStr = t.dueDate || t.date || t.originalDate;
+        if (dueDateStr) {
+          const dueDate = parseISO(dueDateStr);
+          if (!isNaN(dueDate.getTime())) {
+            const diff = differenceInDays(dueDate, today);
+            if (diff <= 2) {
+              notifs.push({
+                id: notifId,
+                title: t.description,
+                monthStr: effMonth,
+                itemId: t.id,
+                type: 'regular_expense',
+                amount: t.amount,
+                dueDate,
+                diff,
+                isLate: diff < 0
+              });
+            }
+          }
+        }
+      }
     });
 
     // Ordenar: mais atrasados/urgentes primeiro

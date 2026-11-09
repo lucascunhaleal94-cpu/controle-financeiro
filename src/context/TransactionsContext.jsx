@@ -807,7 +807,8 @@ export const TransactionsProvider = ({ children, currentUser }) => {
     let isPaid = false;
     if (t.type === 'expense') {
       if (t.isFixedExpense) {
-        isPaid = paidItems[t.overrideMonth || effMonth]?.[t.baseId] || false;
+        const cardPaid = t.paymentMethod && t.paymentMethod.startsWith('CARTÃO') ? (paidItems[effMonth]?.[t.paymentMethod] || false) : false;
+        isPaid = paidItems[effMonth]?.[t.baseId] || paidItems[t.overrideMonth]?.[t.baseId] || cardPaid || false;
       } else {
         // For other expenses (incl. credit cards), we track by their own ID. 
         // We also fallback to the whole card status for retro-compatibility.
