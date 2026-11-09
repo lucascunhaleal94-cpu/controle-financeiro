@@ -4,7 +4,8 @@ import { X } from 'lucide-react';
 import { format } from 'date-fns';
 
 const TransactionForm = ({ onClose, initialData }) => {
-  const { addTransaction, editTransaction, currentMonth, categories, paymentMethods, updateFixedExpenseOverride, incomeSources } = useTransactions();
+  const { addTransaction, editTransaction, currentMonth, categories, paymentMethods, updateFixedExpenseOverride, currentMonthFixedIncomes } = useTransactions();
+  const fixedIncomeSources = Object.keys(currentMonthFixedIncomes || {});
   
   const defaultDate = format(new Date(), 'yyyy-MM-dd').startsWith(currentMonth) 
     ? format(new Date(), 'yyyy-MM-dd') 
@@ -17,7 +18,11 @@ const TransactionForm = ({ onClose, initialData }) => {
   const [dueDate, setDueDate] = useState(initialData?.dueDate || '');
   const [category, setCategory] = useState(initialData?.category || categories[0]?.name || '');
   const [paymentMethod, setPaymentMethod] = useState(initialData?.paymentMethod || paymentMethods?.[0] || 'DINHEIRO/PIX');
-  const [source, setSource] = useState(initialData?.source || incomeSources?.[0] || '');
+  const [source, setSource] = useState(
+    initialData?.source && fixedIncomeSources.includes(initialData.source)
+      ? initialData.source
+      : (fixedIncomeSources[0] || '')
+  );
   const [installments, setInstallments] = useState(1);
   const [details, setDetails] = useState(initialData?.details || '');
   const [attachment, setAttachment] = useState(null);
@@ -26,6 +31,7 @@ const TransactionForm = ({ onClose, initialData }) => {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!description || !amount || !date) return;
+    if (type === 'income' && (!source || !fixedIncomeSources.includes(source))) return;
 
     const data = {
       type,
@@ -36,7 +42,7 @@ const TransactionForm = ({ onClose, initialData }) => {
       dueDate: type === 'expense' && !isCreditCard ? (dueDate || date) : null,
       details,
       attachment,
-      ...(type === 'expense' ? { category, paymentMethod } : { source: (source || 'OUTROS').trim().toUpperCase() })
+      ...(type === 'expense' ? { category, paymentMethod } : { source: source.trim().toUpperCase() })
     };
 
     if (initialData) {
@@ -250,22 +256,24 @@ const TransactionForm = ({ onClose, initialData }) => {
           ) : (
             <div className="form-group">
               <label className="form-label">Fonte de Recebimento</label>
-              <input
-                type="text"
-                list="income-sources-list"
+              <select
                 className="form-control"
-                placeholder="Ex: Salário, Freelance, Nome..."
                 value={source}
                 onChange={(e) => setSource(e.target.value)}
                 required
-              />
-              {incomeSources?.length > 0 && (
-                <datalist id="income-sources-list">
-                  {incomeSources.map(s => (
-                    <option key={s} value={s} />
-                  ))}
-                </datalist>
-              )}
+              >
+                {fixedIncomeSources.length === 0 ? (
+                  <option value="" disabled>
+                    Cadastre uma renda fixa em Configurações
+                  </option>
+                ) : (
+                  fixedIncomeSources.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))
+                )}
+              </select>
             </div>
           )}
 
