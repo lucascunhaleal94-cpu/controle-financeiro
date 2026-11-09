@@ -46,7 +46,7 @@ const Notifications = () => {
       
       if (!isPaid && !ignored.includes(notifId) && !ignored.includes(legacyNotifId)) {
         const baseFe = (settings?.fixedExpenses || []).find(f => f.id === fe.baseId);
-        let dueDay = baseFe?.dueDate;
+        let dueDay = fe.dueDay || baseFe?.dueDate;
         if (!dueDay) {
           dueDay = isCardExpense ? getCardDueDay(fe.paymentMethod, effMonth) : parseISO(fe.date).getDate();
         }

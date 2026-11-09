@@ -78,8 +78,10 @@ export const TransactionsProvider = ({ children, currentUser }) => {
       appStartDate: format(new Date(), 'yyyy-MM'),
       initialBalance: 0,
       fixedIncomes: isAdminUser ? { LUCAS: 15600, GABRIELA: 0 } : {},
+      fixedIncomesOverrides: {},
       fixedExpenses: [], 
       fixedExpensesOverrides: {}, 
+      fixedExpensesHistory: {},
       closingDays: {
         default: {
           'CARTÃO SANTANDER': 1,
@@ -108,6 +110,8 @@ export const TransactionsProvider = ({ children, currentUser }) => {
         ...defaultSettings,
         ...parsed,
         fixedIncomes: parsed.fixedIncomes !== undefined ? parsed.fixedIncomes : defaultSettings.fixedIncomes,
+        fixedIncomesOverrides: parsed.fixedIncomesOverrides || {},
+        fixedExpensesHistory: parsed.fixedExpensesHistory || {},
         ignoredNotifications: parsed.ignoredNotifications || [],
         closingDays: {
           ...defaultSettings.closingDays,
@@ -189,6 +193,15 @@ export const TransactionsProvider = ({ children, currentUser }) => {
          newSettings.fixedExpenses = newSettings.fixedExpenses.map(fe => 
            fe.paymentMethod === oldName ? { ...fe, paymentMethod: formattedNewName } : fe
          );
+       }
+       if (newSettings.fixedExpensesHistory) {
+         Object.keys(newSettings.fixedExpensesHistory).forEach(feId => {
+           Object.keys(newSettings.fixedExpensesHistory[feId] || {}).forEach(m => {
+             if (newSettings.fixedExpensesHistory[feId][m]?.paymentMethod === oldName) {
+               newSettings.fixedExpensesHistory[feId][m].paymentMethod = formattedNewName;
+             }
+           });
+         });
        }
        
        return newSettings;
@@ -304,10 +317,23 @@ export const TransactionsProvider = ({ children, currentUser }) => {
       setTransactions(prev => prev.map(t => t.category === oldName ? { ...t, category: formattedNewName } : t));
       
       // Update fixed expenses categories
-      setSettings(prev => ({
-        ...prev,
-        fixedExpenses: (prev.fixedExpenses || []).map(fe => fe.category === oldName ? { ...fe, category: formattedNewName } : fe)
-      }));
+      setSettings(prev => {
+        const updatedHistory = { ...(prev.fixedExpensesHistory || {}) };
+        Object.keys(updatedHistory).forEach(feId => {
+          const feHist = { ...(updatedHistory[feId] || {}) };
+          Object.keys(feHist).forEach(m => {
+            if (feHist[m]?.category === oldName) {
+              feHist[m] = { ...feHist[m], category: formattedNewName };
+            }
+          });
+          updatedHistory[feId] = feHist;
+        });
+        return {
+          ...prev,
+          fixedExpenses: (prev.fixedExpenses || []).map(fe => fe.category === oldName ? { ...fe, category: formattedNewName } : fe),
+          fixedExpensesHistory: updatedHistory
+        };
+      });
     }
   };
 
@@ -334,9 +360,9 @@ export const TransactionsProvider = ({ children, currentUser }) => {
     setCategories(prev => prev.filter(c => c.name !== name));
   };
 
-  const addFixedExpense = (expense) => {
+  const addFixedExpense = (expense, fromMonth = currentMonth) => {
     updateSettings({
-      fixedExpenses: [...(settings.fixedExpenses || []), { id: uuidv4(), ...expense }]
+      fixedExpenses: [...(settings.fixedExpenses || []), { id: uuidv4(), startMonth: fromMonth, ...expense }]
     });
   };
 
@@ -355,9 +381,81 @@ export const TransactionsProvider = ({ children, currentUser }) => {
     }
   };
 
-  const editFixedExpense = (id, updatedExpense) => {
-    updateSettings({
-      fixedExpenses: (settings.fixedExpenses || []).map(e => e.id === id ? { ...e, ...updatedExpense } : e)
+  const getEffectiveFixedExpenseData = (fe, month = currentMonth, currentSettings = settings) => {
+    const history = currentSettings.fixedExpensesHistory?.[fe.id] || {};
+    let result = {
+      description: fe.description,
+      amount: fe.amount,
+      dueDate: fe.dueDate,
+      category: fe.category,
+      paymentMethod: fe.paymentMethod
+    };
+
+    const applicableMonths = Object.keys(history)
+      .filter(m => m <= month)
+      .sort();
+
+    applicableMonths.forEach(m => {
+      if (history[m] && typeof history[m] === 'object') {
+        result = { ...result, ...history[m] };
+      }
+    });
+
+    return result;
+  };
+
+  const editFixedExpense = (id, updatedExpense, fromMonth = currentMonth) => {
+    setSettings(prev => {
+      const fe = (prev.fixedExpenses || []).find(e => e.id === id);
+      if (!fe) return prev;
+
+      const currentHistory = { ...(prev.fixedExpensesHistory || {}) };
+      const itemHistory = { ...(currentHistory[id] || {}) };
+      const startM = fe.startMonth || prev.appStartDate || '2026-09';
+
+      // Garante um snapshot dos valores anteriores no mês inicial para preservar os meses passados
+      if (fromMonth > startM && !itemHistory[startM]) {
+        const priorData = getEffectiveFixedExpenseData(fe, format(subMonths(parseISO(`${fromMonth}-01`), 1), 'yyyy-MM'), prev);
+        itemHistory[startM] = {
+          description: priorData.description,
+          amount: priorData.amount,
+          dueDate: priorData.dueDate,
+          category: priorData.category,
+          paymentMethod: priorData.paymentMethod
+        };
+      }
+
+      // Remove overrides históricos futuros para que a nova alteração prevaleça nos meses seguintes
+      Object.keys(itemHistory).forEach(m => {
+        if (m > fromMonth) {
+          delete itemHistory[m];
+        }
+      });
+
+      itemHistory[fromMonth] = {
+        ...(itemHistory[fromMonth] || {}),
+        ...updatedExpense
+      };
+
+      currentHistory[id] = itemHistory;
+
+      // Limpa também overrides pontuais em meses futuros para refletir a nova regra a partir de fromMonth
+      const currentOverrides = { ...(prev.fixedExpensesOverrides || {}) };
+      if (currentOverrides[id]) {
+        const cleanedOverrides = { ...currentOverrides[id] };
+        Object.keys(cleanedOverrides).forEach(m => {
+          if (m >= fromMonth) {
+            delete cleanedOverrides[m];
+          }
+        });
+        currentOverrides[id] = cleanedOverrides;
+      }
+
+      return {
+        ...prev,
+        fixedExpensesHistory: currentHistory,
+        fixedExpensesOverrides: currentOverrides
+      };
     });
   };
 
@@ -667,43 +765,138 @@ export const TransactionsProvider = ({ children, currentUser }) => {
     }
   };
 
-  const updateIncomeSource = (oldName, newName, newValue) => {
+  const getFixedIncomesForMonth = (month = currentMonth, currentSettings = settings) => {
+    const baseIncomes = currentSettings.fixedIncomes || {};
+    const overrides = currentSettings.fixedIncomesOverrides || {};
+
+    const allSourceNames = new Set([
+      ...Object.keys(baseIncomes),
+      ...Object.values(overrides).flatMap(mObj => Object.keys(mObj || {}))
+    ]);
+
+    const sortedMonths = Object.keys(overrides).filter(m => m <= month).sort();
+    const result = {};
+
+    allSourceNames.forEach(source => {
+      let val = undefined;
+
+      for (const m of sortedMonths) {
+        if (overrides[m]?.[source] !== undefined) {
+          val = overrides[m][source];
+        }
+      }
+
+      if (val === undefined) {
+        const hasAnyOverride = Object.keys(overrides).some(m => overrides[m]?.[source] !== undefined);
+        // Se a fonte já existia em fixedIncomes (legado) sem histórico, aplica em todos os meses
+        if (!hasAnyOverride && baseIncomes[source] !== undefined) {
+          val = baseIncomes[source];
+        }
+      }
+
+      if (val !== null && val !== undefined) {
+        result[source] = val;
+      }
+    });
+
+    return result;
+  };
+
+  const updateIncomeSource = (oldName, newName, newValue, fromMonth = currentMonth) => {
     const formattedNewName = newName.trim().toUpperCase();
     if (!formattedNewName) return;
 
+    const parsedVal = parseFloat(newValue) || 0;
+
     setSettings(prev => {
-      const currentIncomes = prev.fixedIncomes || {};
-      const updatedIncomes = {};
-      let found = false;
-      Object.entries(currentIncomes).forEach(([key, val]) => {
-        if (key === oldName) {
-          updatedIncomes[formattedNewName] = newValue;
-          found = true;
-        } else {
-          updatedIncomes[key] = val;
+      const currentIncomes = { ...(prev.fixedIncomes || {}) };
+      const currentOverrides = JSON.parse(JSON.stringify(prev.fixedIncomesOverrides || {}));
+      const startM = prev.appStartDate || '2026-09';
+
+      // Se estava editando uma fonte existente, preserva o valor anterior nos meses passados
+      if (oldName && fromMonth > startM) {
+        const hasPriorHistory = Object.keys(currentOverrides).some(m => m < fromMonth && currentOverrides[m]?.[oldName] !== undefined);
+        if (!hasPriorHistory && currentIncomes[oldName] !== undefined) {
+          if (!currentOverrides[startM]) currentOverrides[startM] = {};
+          currentOverrides[startM][oldName] = currentIncomes[oldName];
+        }
+      }
+
+      // Se trocou o nome da fonte, encerra o nome antigo a partir de fromMonth (mantendo meses anteriores intactos)
+      if (oldName && oldName !== formattedNewName) {
+        Object.keys(currentOverrides).forEach(m => {
+          if (m > fromMonth && currentOverrides[m]) {
+            delete currentOverrides[m][oldName];
+          }
+        });
+        if (!currentOverrides[fromMonth]) currentOverrides[fromMonth] = {};
+        currentOverrides[fromMonth][oldName] = null;
+      }
+
+      // Remove overrides futuros da nova fonte para propagar a alteração para os meses seguintes
+      Object.keys(currentOverrides).forEach(m => {
+        if (m > fromMonth && currentOverrides[m]) {
+          delete currentOverrides[m][formattedNewName];
         }
       });
-      if (!found) {
-        updatedIncomes[formattedNewName] = newValue;
+
+      if (!currentOverrides[fromMonth]) currentOverrides[fromMonth] = {};
+      currentOverrides[fromMonth][formattedNewName] = parsedVal;
+
+      // Mantém fixedIncomes sincronizado caso ainda não houvesse histórico anterior
+      if (fromMonth <= startM) {
+        if (oldName && oldName !== formattedNewName) {
+          delete currentIncomes[oldName];
+        }
+        currentIncomes[formattedNewName] = parsedVal;
+      } else if (currentIncomes[formattedNewName] === undefined && !oldName) {
+        // Nova fonte adicionada em mês posterior: não adiciona em currentIncomes base para não afetar meses anteriores
       }
+
       return {
         ...prev,
-        fixedIncomes: updatedIncomes
+        fixedIncomes: currentIncomes,
+        fixedIncomesOverrides: currentOverrides
       };
     });
 
     if (oldName && oldName !== formattedNewName) {
-      setTransactions(prev => prev.map(t => t.source === oldName ? { ...t, source: formattedNewName } : t));
+      setTransactions(prev => prev.map(t => {
+        const effM = getEffectiveMonth(t);
+        return (t.source === oldName && effM >= fromMonth) ? { ...t, source: formattedNewName } : t;
+      }));
     }
   };
 
-  const deleteIncomeSource = (sourceName) => {
+  const deleteIncomeSource = (sourceName, fromMonth = currentMonth) => {
     setSettings(prev => {
-      const updatedIncomes = { ...(prev.fixedIncomes || {}) };
-      delete updatedIncomes[sourceName];
+      const currentIncomes = { ...(prev.fixedIncomes || {}) };
+      const currentOverrides = JSON.parse(JSON.stringify(prev.fixedIncomesOverrides || {}));
+      const startM = prev.appStartDate || '2026-09';
+
+      if (fromMonth > startM) {
+        const hasPriorHistory = Object.keys(currentOverrides).some(m => m < fromMonth && currentOverrides[m]?.[sourceName] !== undefined);
+        if (!hasPriorHistory && currentIncomes[sourceName] !== undefined) {
+          if (!currentOverrides[startM]) currentOverrides[startM] = {};
+          currentOverrides[startM][sourceName] = currentIncomes[sourceName];
+        }
+      } else {
+        delete currentIncomes[sourceName];
+      }
+
+      Object.keys(currentOverrides).forEach(m => {
+        if (m > fromMonth && currentOverrides[m]) {
+          delete currentOverrides[m][sourceName];
+        }
+      });
+
+      if (!currentOverrides[fromMonth]) currentOverrides[fromMonth] = {};
+      currentOverrides[fromMonth][sourceName] = null;
+
       return {
         ...prev,
-        fixedIncomes: updatedIncomes
+        fixedIncomes: currentIncomes,
+        fixedIncomesOverrides: currentOverrides
       };
     });
   };
@@ -716,49 +909,51 @@ export const TransactionsProvider = ({ children, currentUser }) => {
     while (!isBefore(endObj, mDate)) {
       const mStr = format(mDate, 'yyyy-MM');
       
-      if (settings.fixedIncomes) {
-        Object.entries(settings.fixedIncomes).forEach(([sourceName, amountVal]) => {
-          const parsedAmt = parseFloat(amountVal);
-          if (parsedAmt > 0) {
-            virtuals.push({
-              id: `fixed-income-${sourceName.toLowerCase().replace(/\s+/g, '-')}-${mStr}`,
-              type: 'income',
-              description: `Renda Fixa (${sourceName})`,
-              amount: parsedAmt,
-              originalDate: `${mStr}-01`,
-              date: `${mStr}-01`,
-              source: sourceName,
-              isFixed: true
-            });
-          }
-        });
-      }
+      const monthFixedIncomes = getFixedIncomesForMonth(mStr);
+      Object.entries(monthFixedIncomes).forEach(([sourceName, amountVal]) => {
+        const parsedAmt = parseFloat(amountVal);
+        if (parsedAmt > 0) {
+          virtuals.push({
+            id: `fixed-income-${sourceName.toLowerCase().replace(/\s+/g, '-')}-${mStr}`,
+            type: 'income',
+            description: `Renda Fixa (${sourceName})`,
+            amount: parsedAmt,
+            originalDate: `${mStr}-01`,
+            date: `${mStr}-01`,
+            source: sourceName,
+            isFixed: true
+          });
+        }
+      });
 
       if (settings.fixedExpenses) {
         settings.fixedExpenses.forEach(fe => {
+          if (fe.startMonth && mStr < fe.startMonth) return;
           if (fe.endMonth && mStr > fe.endMonth) return;
 
+          const effectiveFe = getEffectiveFixedExpenseData(fe, mStr);
           const override = settings.fixedExpensesOverrides?.[fe.id]?.[mStr];
           const isObj = override !== null && typeof override === 'object';
           
           let overrideAmount = isObj ? override.amount : override;
           const finalAmount = overrideAmount !== undefined && overrideAmount !== '' 
                               ? parseFloat(overrideAmount) 
-                              : parseFloat(fe.amount);
+                              : parseFloat(effectiveFe.amount);
 
           if (finalAmount > 0) {
-            const dayStr = String(fe.dueDate).padStart(2, '0');
+            const dayStr = String(effectiveFe.dueDate).padStart(2, '0');
             const defaultDate = `${mStr}-${dayStr}`;
             
             const originalDate = isObj && override.date ? override.date : defaultDate;
-            const finalDesc = isObj && override.description ? override.description : fe.description + ' (Fixo)';
-            const finalCat = isObj && override.category ? override.category : fe.category;
-            const finalPay = isObj && override.paymentMethod ? override.paymentMethod : fe.paymentMethod;
+            const finalDesc = isObj && override.description ? override.description : effectiveFe.description + ' (Fixo)';
+            const finalCat = isObj && override.category ? override.category : effectiveFe.category;
+            const finalPay = isObj && override.paymentMethod ? override.paymentMethod : effectiveFe.paymentMethod;
 
-            virtuals.push({
+            let virtualTx = {
               id: `fixed-expense-${fe.id}-${mStr}`,
               baseId: fe.id,
               overrideMonth: mStr,
+              dueDay: effectiveFe.dueDate,
               type: 'expense',
               description: finalDesc,
               amount: finalAmount,
@@ -771,7 +966,31 @@ export const TransactionsProvider = ({ children, currentUser }) => {
               hasAttachment: false,
               installmentsTotal: 1,
               currentInstallment: 1
-            });
+            };
+
+            const effMonth = getEffectiveMonth(virtualTx);
+            if (fe.startMonth && effMonth < fe.startMonth) return;
+            if (fe.endMonth && effMonth > fe.endMonth) return;
+
+            // Se o mês efetivo for diferente do mês de compra (ex: cartão fechado), aplica os dados vigentes no mês efetivo
+            if (effMonth !== mStr) {
+              const effFe = getEffectiveFixedExpenseData(fe, effMonth);
+              const effAmount = overrideAmount !== undefined && overrideAmount !== ''
+                                ? parseFloat(overrideAmount)
+                                : parseFloat(effFe.amount);
+              if (effAmount <= 0) return;
+
+              virtualTx = {
+                ...virtualTx,
+                dueDay: effFe.dueDate,
+                description: isObj && override.description ? override.description : effFe.description + ' (Fixo)',
+                amount: effAmount,
+                category: isObj && override.category ? override.category : effFe.category,
+                paymentMethod: isObj && override.paymentMethod ? override.paymentMethod : effFe.paymentMethod
+              };
+            }
+
+            virtuals.push(virtualTx);
           }
         });
       }
@@ -791,8 +1010,10 @@ export const TransactionsProvider = ({ children, currentUser }) => {
       if (t.isFixedExpense) {
         // fixed expense due date
         const fe = (settings.fixedExpenses || []).find(f => f.id === t.baseId);
-        if (fe && fe.dueDate) {
-          computedDueDate = `${effMonth}-${String(fe.dueDate).padStart(2, '0')}`;
+        const effFe = fe ? getEffectiveFixedExpenseData(fe, effMonth) : null;
+        const dueDay = t.dueDay || effFe?.dueDate || fe?.dueDate;
+        if (dueDay) {
+          computedDueDate = `${effMonth}-${String(dueDay).padStart(2, '0')}`;
         } else {
           computedDueDate = `${effMonth}-01`;
         }
@@ -878,9 +1099,11 @@ export const TransactionsProvider = ({ children, currentUser }) => {
     return { method, spent };
   });
 
+  const currentMonthFixedIncomes = getFixedIncomesForMonth(currentMonth);
+
   const incomeSources = Array.from(
     new Set([
-      ...Object.keys(settings.fixedIncomes || {}),
+      ...Object.keys(currentMonthFixedIncomes),
       ...incomes.map((t) => t.source).filter(Boolean)
     ])
   );
@@ -1327,6 +1550,9 @@ export const TransactionsProvider = ({ children, currentUser }) => {
         expensesByPaymentMethod,
         incomesBySource,
         incomeSources,
+        currentMonthFixedIncomes,
+        getFixedIncomesForMonth,
+        getEffectiveFixedExpenseData,
         updateIncomeSource,
         deleteIncomeSource,
         settings,

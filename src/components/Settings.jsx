@@ -10,7 +10,7 @@ const formatCurrency = (value) => {
 };
 
 const Settings = () => {
-  const { settings, updateSettings, currentMonth, addFixedExpense, removeFixedExpense, editFixedExpense, categories, paymentMethods, exportBackup, importBackup, clearIgnoredNotifications, updateIncomeSource, deleteIncomeSource, getCardClosingDay, getCardDueDay, updateCardClosingDay, updateCardDueDay } = useTransactions();
+  const { settings, updateSettings, currentMonth, addFixedExpense, removeFixedExpense, editFixedExpense, getEffectiveFixedExpenseData, currentMonthFixedIncomes, categories, paymentMethods, exportBackup, importBackup, clearIgnoredNotifications, updateIncomeSource, deleteIncomeSource, getCardClosingDay, getCardDueDay, updateCardClosingDay, updateCardDueDay } = useTransactions();
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   
   const [incomeName, setIncomeName] = useState('');
@@ -33,14 +33,9 @@ const Settings = () => {
     const parsedVal = parseFloat(incomeAmt) || 0;
 
     if (editingIncomeKey) {
-      updateIncomeSource(editingIncomeKey, formattedName, parsedVal);
+      updateIncomeSource(editingIncomeKey, formattedName, parsedVal, currentMonth);
     } else {
-      updateSettings({
-        fixedIncomes: {
-          ...(settings.fixedIncomes || {}),
-          [formattedName]: parsedVal
-        }
-      });
+      updateIncomeSource(null, formattedName, parsedVal, currentMonth);
     }
 
     setEditingIncomeKey(null);
@@ -67,7 +62,7 @@ const Settings = () => {
         dueDate: parseInt(due),
         category: cat,
         paymentMethod: pay
-      });
+      }, currentMonth);
       setEditingFixedExpenseId(null);
     } else {
       addFixedExpense({
@@ -76,14 +71,18 @@ const Settings = () => {
         dueDate: parseInt(due),
         category: cat,
         paymentMethod: pay
-      });
+      }, currentMonth);
     }
     setDesc(''); setAmt(''); setDue('');
   };
 
   const monthName = format(parseISO(`${currentMonth}-01`), 'MMMM yyyy', { locale: ptBR });
   const creditCards = paymentMethods.filter(m => m.startsWith('CARTÃO'));
-  const fixedExpensesList = settings.fixedExpenses || [];
+  const fixedExpensesList = (settings.fixedExpenses || []).filter(fe => {
+    if (fe.startMonth && currentMonth < fe.startMonth) return false;
+    if (fe.endMonth && currentMonth > fe.endMonth) return false;
+    return true;
+  });
 
   const handleImport = (e) => {
     const file = e.target.files[0];
@@ -102,9 +101,12 @@ const Settings = () => {
       <div className="card">
         <div className="flex items-center gap-2 mb-6">
           <SettingsIcon size={24} className="text-primary" />
-          <h2>Rendas Fixas (Automáticas)</h2>
+          <h2>Rendas Fixas (<span style={{ textTransform: 'capitalize' }}>{monthName}</span>)</h2>
         </div>
-        <form onSubmit={handleAddOrEditFixedIncome} style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginBottom: Object.keys(settings.fixedIncomes || {}).length > 0 ? '1.5rem' : 0, alignItems: 'flex-end', background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '8px' }}>
+        <p className="text-muted mb-6" style={{ fontSize: '0.9rem' }}>
+          Alterações feitas aqui valem para <strong>{monthName}</strong> e meses seguintes (meses anteriores permanecem inalterados).
+        </p>
+        <form onSubmit={handleAddOrEditFixedIncome} style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginBottom: Object.keys(currentMonthFixedIncomes || {}).length > 0 ? '1.5rem' : 0, alignItems: 'flex-end', background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '8px' }}>
           <div className="form-group" style={{ flex: '1 1 200px', marginBottom: 0 }}>
             <label className="form-label">Nome / Fonte da Renda</label>
             <input
@@ -150,9 +152,9 @@ const Settings = () => {
           </div>
         </form>
 
-        {Object.entries(settings.fixedIncomes || {}).length > 0 && (
+        {Object.entries(currentMonthFixedIncomes || {}).length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            {Object.entries(settings.fixedIncomes || {}).map(([sourceName, amountVal]) => (
+            {Object.entries(currentMonthFixedIncomes || {}).map(([sourceName, amountVal]) => (
               <div key={sourceName} className="flex justify-between items-center" style={{ padding: '0.75rem', border: '1px solid var(--border-color)', borderRadius: '6px' }}>
                 <div>
                   <div style={{ fontWeight: '500' }}>{sourceName}</div>
@@ -182,7 +184,7 @@ const Settings = () => {
                         setIncomeName('');
                         setIncomeAmt('');
                       }
-                      deleteIncomeSource(sourceName);
+                      deleteIncomeSource(sourceName, currentMonth);
                     }}
                     style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
                     title="Remover fonte de renda"
@@ -232,8 +234,11 @@ const Settings = () => {
       <div className="card">
         <div className="flex items-center gap-2 mb-6">
           <SettingsIcon size={24} className="text-expense" />
-          <h2>Despesas Fixas Recorrentes</h2>
+          <h2>Despesas Fixas Recorrentes (<span style={{ textTransform: 'capitalize' }}>{monthName}</span>)</h2>
         </div>
+        <p className="text-muted mb-6" style={{ fontSize: '0.9rem' }}>
+          Alterações feitas aqui valem para <strong>{monthName}</strong> e meses seguintes (meses anteriores permanecem inalterados).
+        </p>
         <form onSubmit={handleAddOrEditFixedExpense} style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginBottom: '2rem', alignItems: 'flex-end', background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '8px' }}>
           <div className="form-group" style={{ flex: '1 1 200px', marginBottom: 0 }}>
             <label className="form-label">Descrição</label>
@@ -283,38 +288,47 @@ const Settings = () => {
 
         {fixedExpensesList.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            {fixedExpensesList.map(fe => (
-              <div key={fe.id} className="flex justify-between items-center" style={{ padding: '0.75rem', border: '1px solid var(--border-color)', borderRadius: '6px' }}>
-                <div>
-                  <div style={{ fontWeight: '500' }}>{fe.description}</div>
-                  <div className="text-muted" style={{ fontSize: '0.8rem' }}>
-                    Todo dia {fe.dueDate} • {fe.paymentMethod} • {fe.category}
-                    {fe.endMonth && (
-                      <span style={{ marginLeft: '0.5rem', color: 'var(--warning-color)' }}>
-                        • Ativa até {format(parseISO(`${fe.endMonth}-01`), 'MM/yyyy')}
-                      </span>
-                    )}
+            {fixedExpensesList.map(fe => {
+              const effectiveFe = getEffectiveFixedExpenseData ? getEffectiveFixedExpenseData(fe, currentMonth) : fe;
+              return (
+                <div key={fe.id} className="flex justify-between items-center" style={{ padding: '0.75rem', border: '1px solid var(--border-color)', borderRadius: '6px' }}>
+                  <div>
+                    <div style={{ fontWeight: '500' }}>{effectiveFe.description}</div>
+                    <div className="text-muted" style={{ fontSize: '0.8rem' }}>
+                      Todo dia {effectiveFe.dueDate} • {effectiveFe.paymentMethod} • {effectiveFe.category}
+                      {fe.endMonth && (
+                        <span style={{ marginLeft: '0.5rem', color: 'var(--warning-color)' }}>
+                          • Ativa até {format(parseISO(`${fe.endMonth}-01`), 'MM/yyyy')}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span style={{ fontWeight: '600' }}>{formatCurrency(effectiveFe.amount)}</span>
+                    <button onClick={() => {
+                      setEditingFixedExpenseId(fe.id);
+                      setDesc(effectiveFe.description);
+                      setAmt(String(effectiveFe.amount));
+                      setDue(String(effectiveFe.dueDate));
+                      setCat(effectiveFe.category);
+                      setPay(effectiveFe.paymentMethod);
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
+                      <Edit2 size={18} />
+                    </button>
+                    <button onClick={() => {
+                      if (editingFixedExpenseId === fe.id) {
+                        setEditingFixedExpenseId(null);
+                        setDesc(''); setAmt(''); setDue('');
+                      }
+                      removeFixedExpense(fe.id, 'currentAndSubsequent', currentMonth);
+                    }} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }} title="Remover a partir deste mês">
+                      <Trash2 size={18} />
+                    </button>
                   </div>
                 </div>
-                <div className="flex items-center gap-4">
-                  <span style={{ fontWeight: '600' }}>{formatCurrency(fe.amount)}</span>
-                  <button onClick={() => {
-                    setEditingFixedExpenseId(fe.id);
-                    setDesc(fe.description);
-                    setAmt(String(fe.amount));
-                    setDue(String(fe.dueDate));
-                    setCat(fe.category);
-                    setPay(fe.paymentMethod);
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                  }} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
-                    <Edit2 size={18} />
-                  </button>
-                  <button onClick={() => setDeleteConfirmFixed(fe)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
-                    <Trash2 size={18} />
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
