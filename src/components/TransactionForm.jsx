@@ -168,7 +168,7 @@ const TransactionForm = ({ onClose, initialData }) => {
             </div>
             
             <div className="form-group w-full">
-              <label className="form-label">Data da Compra</label>
+              <label className="form-label">{type === 'income' ? 'Data do Recebimento' : 'Data da Compra'}</label>
               <input
                 type="date"
                 className="form-control"
