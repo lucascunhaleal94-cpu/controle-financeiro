@@ -8,14 +8,23 @@ import SupabaseSync from './components/SupabaseSync.jsx'
 import { supabase } from './lib/supabase.js'
 
 const RootComponent = () => {
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(() => {
+    return window.location.hash.includes('type=recovery');
+  });
+
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = localStorage.getItem('@ControleFinanceiro:activeUser');
     return saved ? JSON.parse(saved) : null;
   });
 
   useEffect(() => {
+    const isRecoveryHash = window.location.hash.includes('type=recovery');
+    if (isRecoveryHash) {
+      setIsPasswordRecovery(true);
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user && !currentUser) {
+      if (session?.user && !currentUser && !isRecoveryHash && !isPasswordRecovery) {
         const user = {
           id: session.user.id,
           name: session.user.user_metadata?.name || session.user.email,
@@ -25,7 +34,11 @@ const RootComponent = () => {
       }
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsPasswordRecovery(true);
+        return;
+      }
       if (!session?.user) {
          setCurrentUser(null);
          localStorage.removeItem('@ControleFinanceiro:activeUser');
@@ -33,15 +46,26 @@ const RootComponent = () => {
     });
 
     return () => subscription.unsubscribe();
-  }, [currentUser]);
+  }, [currentUser, isPasswordRecovery]);
 
   const handleLogin = (user) => {
     localStorage.setItem('@ControleFinanceiro:activeUser', JSON.stringify(user));
     setCurrentUser(user);
   };
 
-  if (!currentUser) {
-    return <AuthScreen onLogin={handleLogin} />;
+  if (isPasswordRecovery || !currentUser) {
+    return (
+      <AuthScreen
+        onLogin={handleLogin}
+        initialMode={isPasswordRecovery ? 'update_password' : 'login'}
+        onRecoveryComplete={() => {
+          setIsPasswordRecovery(false);
+          if (window.location.hash) {
+            window.history.replaceState(null, '', window.location.pathname);
+          }
+        }}
+      />
+    );
   }
 
   return (
