@@ -254,6 +254,13 @@ const SupabaseSync = ({ currentUser, children }) => {
           } else if (dbCategories && dbCategories.length > 0) {
             finalCategories = dbCategories.map(c => ({ name: c.name, limit: Number(c.color || 0) }));
           }
+          if (
+            currentUser?.email?.toLowerCase() === 'prilealjf@hotmail.com' &&
+            Array.isArray(finalCategories) &&
+            !finalCategories.some(c => c.name === 'DÍVIDA DE TERCEIROS')
+          ) {
+            finalCategories = [...finalCategories, { name: 'DÍVIDA DE TERCEIROS', limit: 0 }];
+          }
           if (finalCategories) {
             localStorage.setItem(getStorageKey('categories'), JSON.stringify(finalCategories));
           }
@@ -273,8 +280,10 @@ const SupabaseSync = ({ currentUser, children }) => {
             localStorage.setItem(getStorageKey('paymentMethods'), JSON.stringify(finalPaymentMethods));
           }
 
+          const categoriesChanged = Array.isArray(finalCategories) && JSON.stringify(cloudCats || []) !== JSON.stringify(finalCategories);
+
           // Se o que temos localmente tiver dados adicionais não salvos na nuvem, atualiza a nuvem agora
-          if (JSON.stringify(cloudPaidItems) !== JSON.stringify(finalPaidItems) || extraImportedTx.length > 0) {
+          if (JSON.stringify(cloudPaidItems) !== JSON.stringify(finalPaidItems) || extraImportedTx.length > 0 || categoriesChanged) {
             const updatedSettings = {
               ...(cleanSettings || contextRef.current?.settings || {}),
               paidItems: finalPaidItems,
@@ -410,20 +419,32 @@ const SupabaseSync = ({ currentUser, children }) => {
     }
   }, [currentUser.id]);
 
+  const isDirtyRef = useRef(false);
+  const isInitialSyncDoneRef = useRef(false);
+
   // Sync reativo com debounce ágil (400ms)
   useEffect(() => {
     if (!isSynced) return;
-    const timer = setTimeout(() => {
-      syncToCloud();
+    if (!isInitialSyncDoneRef.current) {
+      isInitialSyncDoneRef.current = true;
+      return;
+    }
+    isDirtyRef.current = true;
+    const timer = setTimeout(async () => {
+      await syncToCloud();
+      isDirtyRef.current = false;
     }, 400);
 
     return () => clearTimeout(timer);
   }, [context.transactions, context.settings, context.paidItems, context.categories, context.paymentMethods, isSynced, syncToCloud]);
 
-  // Garantir sincronização se a janela/aba estiver sendo fechada
+  // Garantir sincronização se a janela/aba estiver sendo fechada apenas se houver alterações pendentes
   useEffect(() => {
     const handleBeforeUnload = () => {
-      syncToCloud();
+      if (isDirtyRef.current) {
+        syncToCloud();
+        isDirtyRef.current = false;
+      }
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     window.addEventListener('pagehide', handleBeforeUnload);
