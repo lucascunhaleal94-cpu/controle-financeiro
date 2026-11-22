@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useTransactions } from '../context/TransactionsContext';
 import { Trash2, ArrowUpCircle, ArrowDownCircle, Calendar, Edit2, CheckCircle2, Paperclip, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { format, parseISO, isToday, isBefore, startOfDay } from 'date-fns';
@@ -10,15 +11,145 @@ const formatCurrency = (value) => {
 
 
 const MultiSelectFilter = ({ options, selected, onChange, placeholder = "Filtrar..." }) => {
-  const [isOpen, setIsOpen] = React.useState(false);
-  const [searchTerm, setSearchTerm] = React.useState('');
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const triggerRef = useRef(null);
+  const dropdownRef = useRef(null);
+  const listRef = useRef(null);
+  const [dropdownStyle, setDropdownStyle] = useState(null);
 
   const filteredOptions = options.filter(opt => opt.toLowerCase().includes(searchTerm.toLowerCase()));
+
+  const closeDropdown = useCallback(() => {
+    setIsOpen(false);
+    setDropdownStyle(null);
+  }, []);
+
+  const toggleDropdown = useCallback((e) => {
+    e.stopPropagation();
+    setIsOpen(prev => {
+      if (prev) {
+        setDropdownStyle(null);
+      }
+      return !prev;
+    });
+  }, []);
+
+  const updatePosition = useCallback(() => {
+    if (!triggerRef.current) return;
+
+    const triggerRect = triggerRef.current.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    if (
+      triggerRect.bottom < 0 ||
+      triggerRect.top > viewportHeight ||
+      triggerRect.right < 0 ||
+      triggerRect.left > viewportWidth
+    ) {
+      closeDropdown();
+      return;
+    }
+
+    const EDGE_PADDING = 12;
+    const GAP = 6;
+    const maxAllowedWidth = Math.max(180, Math.min(380, viewportWidth - EDGE_PADDING * 2));
+    const measuredWidth = dropdownRef.current ? dropdownRef.current.offsetWidth : 240;
+    const effectiveWidth = Math.min(measuredWidth, maxAllowedWidth);
+
+    let left = triggerRect.left;
+    if (left + effectiveWidth > viewportWidth - EDGE_PADDING) {
+      left = triggerRect.right - effectiveWidth;
+    }
+    if (left < EDGE_PADDING) {
+      left = EDGE_PADDING;
+    }
+    if (left + effectiveWidth > viewportWidth - EDGE_PADDING) {
+      left = Math.max(EDGE_PADDING, viewportWidth - EDGE_PADDING - effectiveWidth);
+    }
+
+    const spaceBelow = Math.floor(viewportHeight - triggerRect.bottom - GAP - EDGE_PADDING);
+    const spaceAbove = Math.floor(triggerRect.top - GAP - EDGE_PADDING);
+    const listOverflow = listRef.current
+      ? Math.max(0, listRef.current.scrollHeight - listRef.current.clientHeight)
+      : 0;
+    const desiredHeight = dropdownRef.current
+      ? dropdownRef.current.offsetHeight + listOverflow
+      : 280;
+
+    const openAbove = spaceBelow < Math.min(desiredHeight, 320) && spaceAbove > spaceBelow;
+
+    if (spaceBelow < 120 && spaceAbove < 120) {
+      setDropdownStyle({
+        position: 'fixed',
+        left: `${Math.round(left)}px`,
+        top: `${EDGE_PADDING}px`,
+        bottom: 'auto',
+        maxHeight: `${Math.max(100, viewportHeight - EDGE_PADDING * 2)}px`,
+        maxWidth: `${maxAllowedWidth}px`,
+        visibility: 'visible'
+      });
+    } else if (openAbove) {
+      setDropdownStyle({
+        position: 'fixed',
+        left: `${Math.round(left)}px`,
+        top: 'auto',
+        bottom: `${Math.round(viewportHeight - triggerRect.top + GAP)}px`,
+        maxHeight: `${spaceAbove}px`,
+        maxWidth: `${maxAllowedWidth}px`,
+        visibility: 'visible'
+      });
+    } else {
+      setDropdownStyle({
+        position: 'fixed',
+        left: `${Math.round(left)}px`,
+        top: `${Math.round(triggerRect.bottom + GAP)}px`,
+        bottom: 'auto',
+        maxHeight: `${spaceBelow}px`,
+        maxWidth: `${maxAllowedWidth}px`,
+        visibility: 'visible'
+      });
+    }
+  }, [closeDropdown]);
+
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+    updatePosition();
+  }, [isOpen, updatePosition, filteredOptions.length]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleScrollOrResize = (e) => {
+      if (e.type === 'scroll' && dropdownRef.current && dropdownRef.current.contains(e.target)) {
+        return;
+      }
+      updatePosition();
+    };
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        closeDropdown();
+      }
+    };
+
+    window.addEventListener('resize', handleScrollOrResize);
+    window.addEventListener('scroll', handleScrollOrResize, true);
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('resize', handleScrollOrResize);
+      window.removeEventListener('scroll', handleScrollOrResize, true);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, updatePosition, closeDropdown]);
 
   return (
     <div style={{ position: 'relative', marginTop: '0.5rem', width: '100%' }}>
       <div 
-        onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }}
+        ref={triggerRef}
+        onClick={toggleDropdown}
         style={{ 
           width: '100%', padding: '0.25rem 0.5rem', fontSize: '0.8rem', borderRadius: '6px', 
           border: isOpen || selected.length > 0 ? '1px solid var(--primary-color)' : '1px solid var(--border-color)',
@@ -33,25 +164,38 @@ const MultiSelectFilter = ({ options, selected, onChange, placeholder = "Filtrar
         <span style={{ fontSize: '0.6rem', marginLeft: '4px' }}>▼</span>
       </div>
       
-      {isOpen && (
+      {isOpen && createPortal(
         <>
           <div 
-            style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 40 }} 
-            onClick={(e) => { e.stopPropagation(); setIsOpen(false); }} 
+            style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9998 }} 
+            onClick={(e) => { e.stopPropagation(); closeDropdown(); }} 
           />
           <div 
+            ref={dropdownRef}
             onClick={(e) => e.stopPropagation()}
             style={{ 
-              position: 'absolute', top: '100%', left: 0, zIndex: 100, 
-              backgroundColor: '#0f172a', border: '1px solid #475569', 
-              borderRadius: '8px', marginTop: '6px', width: 'max-content', minWidth: '220px', maxWidth: '380px',
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              visibility: 'hidden',
+              zIndex: 9999,
+              backgroundColor: '#0f172a',
+              border: '1px solid #475569',
+              borderRadius: '8px',
+              width: 'max-content',
+              minWidth: '220px',
+              maxWidth: '380px',
               boxShadow: '0 12px 28px -4px rgba(0, 0, 0, 0.85), 0 4px 12px -2px rgba(0, 0, 0, 0.6)',
               padding: '0.65rem',
-              maxHeight: '320px', display: 'flex', flexDirection: 'column',
-              color: '#f8fafc', textAlign: 'left', fontWeight: '400'
+              display: 'flex',
+              flexDirection: 'column',
+              color: '#f8fafc',
+              textAlign: 'left',
+              fontWeight: '400',
+              ...dropdownStyle
             }}
           >
-            <div style={{ marginBottom: '0.5rem' }}>
+            <div style={{ marginBottom: '0.5rem', flexShrink: 0 }}>
               <input 
                 type="text" 
                 placeholder="Buscar..." 
@@ -64,7 +208,7 @@ const MultiSelectFilter = ({ options, selected, onChange, placeholder = "Filtrar
                 }}
               />
             </div>
-            <div style={{ overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            <div ref={listRef} style={{ overflowY: 'auto', overflowX: 'hidden', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
               {filteredOptions.length === 0 ? (
                 <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)', padding: '0.35rem 0.4rem' }}>Nenhum encontrado</span>
               ) : (
@@ -72,7 +216,8 @@ const MultiSelectFilter = ({ options, selected, onChange, placeholder = "Filtrar
                   <label style={{ 
                     display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', 
                     fontWeight: '600', color: '#e2e8f0', cursor: 'pointer', whiteSpace: 'nowrap', 
-                    borderBottom: '1px solid #334155', padding: '0.35rem 0.4rem 0.5rem 0.4rem', marginBottom: '0.25rem' 
+                    borderBottom: '1px solid #334155', padding: '0.35rem 0.4rem 0.5rem 0.4rem', marginBottom: '0.25rem',
+                    flexShrink: 0
                   }}>
                     <input 
                       type="checkbox"
@@ -94,6 +239,7 @@ const MultiSelectFilter = ({ options, selected, onChange, placeholder = "Filtrar
                     return (
                       <label 
                         key={opt} 
+                        title={opt}
                         style={{ 
                           display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', 
                           color: isChecked ? '#60a5fa' : '#f8fafc',
@@ -101,7 +247,8 @@ const MultiSelectFilter = ({ options, selected, onChange, placeholder = "Filtrar
                           backgroundColor: isChecked ? 'rgba(59, 130, 246, 0.12)' : 'transparent',
                           padding: '0.35rem 0.4rem', borderRadius: '4px',
                           cursor: 'pointer', whiteSpace: 'nowrap',
-                          transition: 'background-color 0.15s ease'
+                          transition: 'background-color 0.15s ease',
+                          flexShrink: 0
                         }}
                         onMouseEnter={(e) => { if (!isChecked) e.currentTarget.style.backgroundColor = '#1e293b'; }}
                         onMouseLeave={(e) => { if (!isChecked) e.currentTarget.style.backgroundColor = 'transparent'; }}
@@ -118,7 +265,7 @@ const MultiSelectFilter = ({ options, selected, onChange, placeholder = "Filtrar
                             }
                           }}
                         />
-                        {opt}
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{opt}</span>
                       </label>
                     );
                   })}
@@ -126,7 +273,8 @@ const MultiSelectFilter = ({ options, selected, onChange, placeholder = "Filtrar
               )}
             </div>
           </div>
-        </>
+        </>,
+        document.body
       )}
     </div>
   );
