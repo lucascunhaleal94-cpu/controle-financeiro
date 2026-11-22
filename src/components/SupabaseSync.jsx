@@ -56,7 +56,7 @@ const SupabaseSync = ({ currentUser, children }) => {
     const fetchCloudData = async () => {
       try {
         // 1. Tentar puxar dados da nuvem
-        const { data: dbSettings } = await supabase.from('user_settings').select('*').eq('user_id', currentUser.id).single();
+        const { data: dbSettings, error: settingsError } = await supabase.from('user_settings').select('*').eq('user_id', currentUser.id).single();
         const { data: dbTransactions } = await supabase.from('transactions').select('*').eq('user_id', currentUser.id);
         const { data: dbPaidItems } = await supabase.from('paid_items').select('*').eq('user_id', currentUser.id);
         const { data: dbCategories } = await supabase.from('categories').select('*').eq('user_id', currentUser.id);
@@ -361,6 +361,19 @@ const SupabaseSync = ({ currentUser, children }) => {
             } catch (err) {
               console.error('Erro forçando upload:', err);
               alert('Erro ao enviar para a nuvem: ' + err.message);
+            }
+          } else if (settingsError?.code === 'PGRST116') {
+            // Conta nova sem registro na nuvem: persiste estado inicial limpo
+            try {
+              const settingsToPush = {
+                ...(currentCtx?.settings || {}),
+                paidItems: currentCtx?.paidItems || {},
+                categories: currentCtx?.categories || [{ name: 'DÍVIDA DE TERCEIROS', limit: 0 }],
+                paymentMethods: currentCtx?.paymentMethods || ['DINHEIRO/PIX']
+              };
+              await supabase.from('user_settings').upsert({ user_id: currentUser.id, settings: settingsToPush });
+            } catch (err) {
+              console.error('Erro ao inicializar configurações limpas na nuvem:', err);
             }
           }
         }

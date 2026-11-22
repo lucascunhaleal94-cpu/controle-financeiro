@@ -15,7 +15,8 @@ const TransactionForm = ({ onClose, initialData }) => {
   const [description, setDescription] = useState(initialData?.description || '');
   const [amount, setAmount] = useState(initialData?.amount || '');
   const [date, setDate] = useState(initialData?.date || defaultDate);
-  const [category, setCategory] = useState(initialData?.category || categories[0]?.name || '');
+  const defaultCategory = categories.find(c => c.name !== 'DÍVIDA DE TERCEIROS')?.name || categories[0]?.name || '';
+  const [category, setCategory] = useState(initialData?.category || defaultCategory);
   const [paymentMethod, setPaymentMethod] = useState(initialData?.paymentMethod || paymentMethods?.[0] || 'DINHEIRO/PIX');
   const [source, setSource] = useState(
     initialData?.source && fixedIncomeSources.includes(initialData.source)

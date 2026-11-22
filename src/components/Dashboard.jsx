@@ -331,6 +331,11 @@ const Dashboard = () => {
         </div>
         
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          {expensesByCategory.length === 1 && expensesByCategory[0].name === 'DÍVIDA DE TERCEIROS' && (
+            <p className="text-muted" style={{ fontSize: '0.85rem', margin: 0 }}>
+              Nenhuma categoria pessoal cadastrada ainda. Clique em "Gerenciar" para adicionar suas categorias.
+            </p>
+          )}
           {expensesByCategory.map((cat) => {
             const isOverLimit = cat.percentage > 100;
             const isWarning = cat.percentage > 80 && !isOverLimit;
@@ -346,6 +351,9 @@ const Dashboard = () => {
                 >
                   <div className="flex items-center gap-2">
                     <span style={{ fontWeight: '600' }}>{cat.name}</span>
+                    {cat.name === 'DÍVIDA DE TERCEIROS' && (
+                      <span className="text-muted" style={{ fontSize: '0.75rem' }}>(não interfere no saldo)</span>
+                    )}
                     {hasTransactions && (
                       <span className="text-muted" title="Ver detalhes">
                         {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}

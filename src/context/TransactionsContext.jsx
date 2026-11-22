@@ -6,7 +6,13 @@ import { supabase } from '../lib/supabase';
 
 const TransactionsContext = createContext();
 
+export const THIRD_PARTY_DEBT_CATEGORY = 'DÍVIDA DE TERCEIROS';
+
 export const CATEGORIES = [
+  { name: THIRD_PARTY_DEBT_CATEGORY, limit: 0 }
+];
+
+const LEGACY_ADMIN_CATEGORIES = [
   { name: 'LAZER', limit: 1350 },
   { name: 'SAÚDE', limit: 2400 },
   { name: 'CARRO', limit: 800 },
@@ -18,10 +24,14 @@ export const CATEGORIES = [
   { name: 'PRESENTE', limit: 500 },
   { name: 'EDUCAÇÃO', limit: 6000 },
   { name: 'MESADA GABRIELA', limit: 800 },
-  { name: 'DÍVIDA DE TERCEIROS', limit: 0 }
+  { name: THIRD_PARTY_DEBT_CATEGORY, limit: 0 }
 ];
 
 const DEFAULT_PAYMENT_METHODS = [
+  'DINHEIRO/PIX'
+];
+
+const LEGACY_ADMIN_PAYMENT_METHODS = [
   'DINHEIRO/PIX',
   'CARTÃO SANTANDER',
   'CARTÃO NUBANK',
@@ -29,11 +39,12 @@ const DEFAULT_PAYMENT_METHODS = [
   'CARTÃO XP'
 ];
 
-export const INCOME_SOURCES = ['LUCAS', 'GABRIELA'];
+export const INCOME_SOURCES = [];
 
 export const useTransactions = () => useContext(TransactionsContext);
 
 export const TransactionsProvider = ({ children, currentUser }) => {
+  const isAdminUser = currentUser?.email?.toLowerCase() === 'lucas@admin.com';
   const getStorageKey = (key) => `@ControleFinanceiro_${currentUser.id}:${key}`;
 
   const deleteFromCloud = (idsToDelete) => {
@@ -73,7 +84,6 @@ export const TransactionsProvider = ({ children, currentUser }) => {
   });
 
   const [settings, setSettings] = useState(() => {
-    const isAdminUser = currentUser?.email === 'lucas@admin.com';
     const defaultSettings = {
       appStartDate: format(new Date(), 'yyyy-MM'),
       initialBalance: 0,
@@ -83,21 +93,21 @@ export const TransactionsProvider = ({ children, currentUser }) => {
       fixedExpensesOverrides: {}, 
       fixedExpensesHistory: {},
       closingDays: {
-        default: {
+        default: isAdminUser ? {
           'CARTÃO SANTANDER': 1,
           'CARTÃO NUBANK': 10,
           'CARTÃO ITAÚ': 10,
           'CARTÃO XP': 1
-        },
+        } : {},
         overrides: {}
       },
       dueDays: {
-        default: {
+        default: isAdminUser ? {
           'CARTÃO SANTANDER': 10,
           'CARTÃO NUBANK': 21,
           'CARTÃO ITAÚ': 21,
           'CARTÃO XP': 10
-        },
+        } : {},
         overrides: {}
       },
       ignoredNotifications: []
@@ -135,7 +145,7 @@ export const TransactionsProvider = ({ children, currentUser }) => {
   const [categories, setCategories] = useState(() => {
     const saved = localStorage.getItem(getStorageKey('categories'));
     if (saved) return JSON.parse(saved);
-    return CATEGORIES;
+    return isAdminUser ? LEGACY_ADMIN_CATEGORIES : CATEGORIES;
   });
 
   const [currentMonth, setCurrentMonth] = useState(format(new Date(), 'yyyy-MM'));
@@ -143,7 +153,7 @@ export const TransactionsProvider = ({ children, currentUser }) => {
   const [paymentMethods, setPaymentMethods] = useState(() => {
     const saved = localStorage.getItem(getStorageKey('paymentMethods'));
     if (saved) return JSON.parse(saved);
-    return DEFAULT_PAYMENT_METHODS;
+    return isAdminUser ? LEGACY_ADMIN_PAYMENT_METHODS : DEFAULT_PAYMENT_METHODS;
   });
 
   useEffect(() => {
@@ -306,11 +316,23 @@ export const TransactionsProvider = ({ children, currentUser }) => {
   };
 
   const addCategory = (categoryData) => {
-    setCategories(prev => [...prev, { name: categoryData.name.toUpperCase(), limit: parseFloat(categoryData.limit) || 0 }]);
+    const formattedName = categoryData.name.trim().toUpperCase();
+    if (!formattedName) return;
+    setCategories(prev => {
+      if (prev.some(c => c.name === formattedName)) return prev;
+      const newCat = { name: formattedName, limit: parseFloat(categoryData.limit) || 0 };
+      const thirdPartyIdx = prev.findIndex(c => c.name === THIRD_PARTY_DEBT_CATEGORY);
+      if (thirdPartyIdx !== -1) {
+        return [...prev.slice(0, thirdPartyIdx), newCat, ...prev.slice(thirdPartyIdx)];
+      }
+      return [...prev, newCat];
+    });
   };
 
   const updateCategory = (oldName, newName, newLimit) => {
-    const formattedNewName = newName.toUpperCase();
+    if (oldName === THIRD_PARTY_DEBT_CATEGORY) return;
+    const formattedNewName = newName.trim().toUpperCase();
+    if (!formattedNewName) return;
     setCategories(prev => prev.map(c => c.name === oldName ? { name: formattedNewName, limit: parseFloat(newLimit) || 0 } : c));
     
     if (oldName !== formattedNewName) {
@@ -338,6 +360,7 @@ export const TransactionsProvider = ({ children, currentUser }) => {
   };
 
   const deleteCategory = (name, substituteCategoryName = null) => {
+    if (name === THIRD_PARTY_DEBT_CATEGORY) return;
     if (substituteCategoryName) {
       setTransactions(prev => prev.map(t => t.category === name ? { ...t, category: substituteCategoryName } : t));
       

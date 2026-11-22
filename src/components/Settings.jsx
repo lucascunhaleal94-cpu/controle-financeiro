@@ -20,7 +20,8 @@ const Settings = () => {
   const [desc, setDesc] = useState('');
   const [amt, setAmt] = useState('');
   const [due, setDue] = useState('');
-  const [cat, setCat] = useState(categories[0]?.name || '');
+  const defaultCategory = categories.find(c => c.name !== 'DÍVIDA DE TERCEIROS')?.name || categories[0]?.name || '';
+  const [cat, setCat] = useState(defaultCategory);
   const [pay, setPay] = useState(paymentMethods?.[0] || 'DINHEIRO/PIX');
   const [editingFixedExpenseId, setEditingFixedExpenseId] = useState(null);
   const [deleteConfirmFixed, setDeleteConfirmFixed] = useState(null);
@@ -343,6 +344,11 @@ const Settings = () => {
           Altere as datas para as faturas de <strong>{monthName}</strong> e meses seguintes (meses anteriores não são afetados).
         </p>
         
+        {creditCards.length === 0 ? (
+          <p className="text-muted" style={{ fontSize: '0.9rem', margin: 0 }}>
+            Nenhum cartão cadastrado ainda. Clique em "Gerenciar Cartões" para adicionar seus cartões.
+          </p>
+        ) : (
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
@@ -379,6 +385,7 @@ const Settings = () => {
             })}
           </tbody>
         </table>
+        )}
       </div>
 
       <div className="card">

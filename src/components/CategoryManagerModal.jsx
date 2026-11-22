@@ -127,38 +127,54 @@ const CategoryManagerModal = ({ onClose }) => {
         ) : (
           <>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
-              {categories.map(cat => (
-                <div key={cat.name} style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'var(--bg-card)', padding: '1rem', borderRadius: '8px' }}>
-                  {editingId === cat.name ? (
-                    <>
-                      <input 
-                        type="text" 
-                        className="form-control" 
-                        value={editName} 
-                        onChange={(e) => setEditName(e.target.value)} 
-                        style={{ flex: 2 }}
-                      />
-                      <input 
-                        type="number" 
-                        className="form-control" 
-                        value={editLimit} 
-                        onChange={(e) => setEditLimit(e.target.value)} 
-                        placeholder="Limite (Máx)" 
-                        style={{ flex: 1 }}
-                      />
-                      <button className="btn btn-primary" onClick={handleSaveEdit} style={{ padding: '0.5rem' }}><Save size={18} /></button>
-                      <button className="btn btn-secondary" onClick={() => setEditingId(null)} style={{ padding: '0.5rem' }}><X size={18} /></button>
-                    </>
-                  ) : (
-                    <>
-                      <div style={{ flex: 2, fontWeight: 'bold' }}>{cat.name}</div>
-                      <div style={{ flex: 1, color: 'var(--text-muted)' }}>Máx: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cat.limit || 0)}</div>
-                      <button className="text-muted" onClick={() => handleEdit(cat)} title="Editar"><Edit2 size={18} /></button>
-                      <button className="text-expense" onClick={() => attemptDelete(cat)} title="Excluir"><Trash2 size={18} /></button>
-                    </>
-                  )}
-                </div>
-              ))}
+              {categories.length === 1 && categories[0].name === 'DÍVIDA DE TERCEIROS' && (
+                <p className="text-muted" style={{ fontSize: '0.85rem', margin: 0 }}>
+                  Nenhuma categoria pessoal cadastrada ainda. Clique em "Nova Categoria" abaixo para criar suas categorias.
+                </p>
+              )}
+              {categories.map(cat => {
+                const isSystemFixed = cat.name === 'DÍVIDA DE TERCEIROS';
+                return (
+                  <div key={cat.name} style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'var(--bg-card)', padding: '1rem', borderRadius: '8px' }}>
+                    {editingId === cat.name && !isSystemFixed ? (
+                      <>
+                        <input 
+                          type="text" 
+                          className="form-control" 
+                          value={editName} 
+                          onChange={(e) => setEditName(e.target.value)} 
+                          style={{ flex: 2 }}
+                        />
+                        <input 
+                          type="number" 
+                          className="form-control" 
+                          value={editLimit} 
+                          onChange={(e) => setEditLimit(e.target.value)} 
+                          placeholder="Limite (Máx)" 
+                          style={{ flex: 1 }}
+                        />
+                        <button className="btn btn-primary" onClick={handleSaveEdit} style={{ padding: '0.5rem' }}><Save size={18} /></button>
+                        <button className="btn btn-secondary" onClick={() => setEditingId(null)} style={{ padding: '0.5rem' }}><X size={18} /></button>
+                      </>
+                    ) : (
+                      <>
+                        <div style={{ flex: 2, fontWeight: 'bold' }}>{cat.name}</div>
+                        <div style={{ flex: 1, color: 'var(--text-muted)', fontSize: isSystemFixed ? '0.8rem' : 'inherit' }}>
+                          {isSystemFixed
+                            ? 'Fixa • Não interfere no saldo'
+                            : `Máx: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cat.limit || 0)}`}
+                        </div>
+                        {!isSystemFixed && (
+                          <>
+                            <button className="text-muted" onClick={() => handleEdit(cat)} title="Editar"><Edit2 size={18} /></button>
+                            <button className="text-expense" onClick={() => attemptDelete(cat)} title="Excluir"><Trash2 size={18} /></button>
+                          </>
+                        )}
+                      </>
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
             {isAdding ? (

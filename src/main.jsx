@@ -69,7 +69,7 @@ const RootComponent = () => {
   }
 
   return (
-    <TransactionsProvider currentUser={currentUser}>
+    <TransactionsProvider key={currentUser.id} currentUser={currentUser}>
       <SupabaseSync currentUser={currentUser}>
         <App />
       </SupabaseSync>
