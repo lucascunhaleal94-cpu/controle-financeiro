@@ -1073,43 +1073,53 @@ const safeFormatDate = (dateString, formatStr) => {
         </div>
       )}
 
-      {deleteConfirmFixed && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem', overflowY: 'auto' }}>
-          <div className="card" style={{ width: '90%', maxWidth: '420px', backgroundColor: 'var(--bg-main)', margin: 'auto' }}>
-            <h3 style={{ marginBottom: '1rem' }}>Excluir Despesa Fixa</h3>
-            <p style={{ marginBottom: '1.5rem', color: 'var(--text-muted)' }}>
-              Você está excluindo a despesa fixa "<strong>{deleteConfirmFixed.description}</strong>". Como deseja aplicar esta exclusão?
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              <button 
-                className="btn btn-outline" 
-                onClick={() => { 
-                  removeFixedExpense(deleteConfirmFixed.baseId, 'currentAndSubsequent', deleteConfirmFixed.overrideMonth || currentMonth); 
-                  setDeleteConfirmFixed(null); 
-                }}
-              >
-                Apenas para o mês em curso ({safeFormatDate(`${deleteConfirmFixed.overrideMonth || currentMonth}-01`, 'MM/yyyy')}) e posteriores
-              </button>
-              <button 
-                className="btn btn-danger" 
-                onClick={() => { 
-                  removeFixedExpense(deleteConfirmFixed.baseId, 'all'); 
-                  setDeleteConfirmFixed(null); 
-                }}
-              >
-                Para todos os meses (anteriores, em curso e posteriores)
-              </button>
-              <button 
-                className="btn" 
-                style={{ backgroundColor: 'transparent', color: 'var(--text-muted)' }} 
-                onClick={() => setDeleteConfirmFixed(null)}
-              >
-                Cancelar
-              </button>
+      {deleteConfirmFixed && (() => {
+        const targetMonth = getEffectiveMonth ? getEffectiveMonth(deleteConfirmFixed) : (deleteConfirmFixed.overrideMonth || currentMonth);
+        const formattedTargetMonth = safeFormatDate(`${targetMonth}-01`, 'MM/yyyy');
+        const handleRemoveFixed = (mode) => {
+          removeFixedExpense(deleteConfirmFixed.baseId, mode, targetMonth);
+          setSelectedTx(prev => prev.filter(id => id !== deleteConfirmFixed.id));
+          setDeleteConfirmFixed(null);
+        };
+
+        return (
+          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem', overflowY: 'auto' }}>
+            <div className="card" style={{ width: '90%', maxWidth: '420px', backgroundColor: 'var(--bg-main)', margin: 'auto' }}>
+              <h3 style={{ marginBottom: '1rem' }}>Excluir Despesa Fixa</h3>
+              <p style={{ marginBottom: '1.5rem', color: 'var(--text-muted)' }}>
+                Você está excluindo a despesa fixa "<strong>{deleteConfirmFixed.description}</strong>". Como deseja aplicar esta exclusão?
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <button 
+                  className="btn btn-outline" 
+                  onClick={() => handleRemoveFixed('currentOnly')}
+                >
+                  Apenas para o mês em curso ({formattedTargetMonth})
+                </button>
+                <button 
+                  className="btn btn-outline" 
+                  onClick={() => handleRemoveFixed('currentAndSubsequent')}
+                >
+                  Para o mês em curso ({formattedTargetMonth}) e posteriores
+                </button>
+                <button 
+                  className="btn btn-danger" 
+                  onClick={() => handleRemoveFixed('all')}
+                >
+                  Para todos os meses (anteriores, em curso e posteriores)
+                </button>
+                <button 
+                  className="btn" 
+                  style={{ backgroundColor: 'transparent', color: 'var(--text-muted)' }} 
+                  onClick={() => setDeleteConfirmFixed(null)}
+                >
+                  Cancelar
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Modal de Dupla Confirmação Ágil para Marcar como PAGA */}
       {payConfirmTx && (

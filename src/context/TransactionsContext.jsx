@@ -391,16 +391,31 @@ export const TransactionsProvider = ({ children, currentUser }) => {
 
   const removeFixedExpense = (id, mode = 'all', fromMonth = currentMonth) => {
     if (mode === 'all') {
-      updateSettings({
-        fixedExpenses: (settings.fixedExpenses || []).filter(e => e.id !== id)
-      });
+      setSettings(prev => ({
+        ...prev,
+        fixedExpenses: (prev.fixedExpenses || []).filter(e => e.id !== id)
+      }));
     } else if (mode === 'currentAndSubsequent') {
       const prevMonthStr = format(subMonths(parseISO(`${fromMonth}-01`), 1), 'yyyy-MM');
-      updateSettings({
-        fixedExpenses: (settings.fixedExpenses || []).map(e => 
+      setSettings(prev => ({
+        ...prev,
+        fixedExpenses: (prev.fixedExpenses || []).map(e => 
           e.id === id ? { ...e, endMonth: prevMonthStr } : e
         )
-      });
+      }));
+    } else if (mode === 'currentOnly') {
+      setSettings(prev => ({
+        ...prev,
+        fixedExpenses: (prev.fixedExpenses || []).map(e => {
+          if (e.id !== id) return e;
+          const existingExcluded = Array.isArray(e.excludedMonths) ? e.excludedMonths : [];
+          if (existingExcluded.includes(fromMonth)) return e;
+          return {
+            ...e,
+            excludedMonths: [...existingExcluded, fromMonth]
+          };
+        })
+      }));
     }
   };
 
@@ -994,6 +1009,7 @@ export const TransactionsProvider = ({ children, currentUser }) => {
             const effMonth = getEffectiveMonth(virtualTx);
             if (fe.startMonth && effMonth < fe.startMonth) return;
             if (fe.endMonth && effMonth > fe.endMonth) return;
+            if (Array.isArray(fe.excludedMonths) && fe.excludedMonths.includes(effMonth)) return;
 
             // Se o mês efetivo for diferente do mês de compra (ex: cartão fechado), aplica os dados vigentes no mês efetivo
             if (effMonth !== mStr) {

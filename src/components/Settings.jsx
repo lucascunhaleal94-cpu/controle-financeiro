@@ -82,6 +82,7 @@ const Settings = () => {
   const fixedExpensesList = (settings.fixedExpenses || []).filter(fe => {
     if (fe.startMonth && currentMonth < fe.startMonth) return false;
     if (fe.endMonth && currentMonth > fe.endMonth) return false;
+    if (Array.isArray(fe.excludedMonths) && fe.excludedMonths.includes(currentMonth)) return false;
     return true;
   });
 
@@ -437,11 +438,20 @@ const Settings = () => {
               <button 
                 className="btn btn-outline" 
                 onClick={() => { 
+                  removeFixedExpense(deleteConfirmFixed.id, 'currentOnly', currentMonth); 
+                  setDeleteConfirmFixed(null); 
+                }}
+              >
+                Apenas para o mês em curso ({format(parseISO(`${currentMonth}-01`), 'MM/yyyy')})
+              </button>
+              <button 
+                className="btn btn-outline" 
+                onClick={() => { 
                   removeFixedExpense(deleteConfirmFixed.id, 'currentAndSubsequent', currentMonth); 
                   setDeleteConfirmFixed(null); 
                 }}
               >
-                Apenas para o mês em curso ({format(parseISO(`${currentMonth}-01`), 'MM/yyyy')}) e posteriores
+                Para o mês em curso ({format(parseISO(`${currentMonth}-01`), 'MM/yyyy')}) e posteriores
               </button>
               <button 
                 className="btn btn-danger" 
