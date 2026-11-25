@@ -52,15 +52,44 @@ const SupabaseSync = ({ currentUser, children }) => {
   });
 
   // Carregamento Inicial
+  const lastSyncedTxMapRef = useRef(new Map());
+  const txDirtyRef = useRef(false);
+  const settingsDirtyRef = useRef(false);
+
   useEffect(() => {
     const fetchCloudData = async () => {
       try {
-        // 1. Tentar puxar dados da nuvem
-        const { data: dbSettings, error: settingsError } = await supabase.from('user_settings').select('*').eq('user_id', currentUser.id).single();
-        const { data: dbTransactions } = await supabase.from('transactions').select('*').eq('user_id', currentUser.id);
-        const { data: dbPaidItems } = await supabase.from('paid_items').select('*').eq('user_id', currentUser.id);
-        const { data: dbCategories } = await supabase.from('categories').select('*').eq('user_id', currentUser.id);
-        const { data: dbPaymentMethods } = await supabase.from('payment_methods').select('*').eq('user_id', currentUser.id);
+        // 1. Puxar configurações e transações em paralelo (só busca tabelas legadas se necessário)
+        const [
+          { data: dbSettings, error: settingsError },
+          { data: dbTransactions }
+        ] = await Promise.all([
+          supabase.from('user_settings').select('settings').eq('user_id', currentUser.id).single(),
+          supabase
+            .from('transactions')
+            .select('id, group_id, type, description, amount, date, original_date, details, category, payment_method, installments_total, current_installment, source')
+            .eq('user_id', currentUser.id),
+        ]);
+
+        const needsLegacyPaid = !dbSettings?.settings?.paidItems;
+        const needsLegacyCats = !Array.isArray(dbSettings?.settings?.categories) || dbSettings.settings.categories.length === 0;
+        const needsLegacyMethods = !Array.isArray(dbSettings?.settings?.paymentMethods) || dbSettings.settings.paymentMethods.length === 0;
+
+        const [
+          { data: dbPaidItems },
+          { data: dbCategories },
+          { data: dbPaymentMethods }
+        ] = await Promise.all([
+          needsLegacyPaid
+            ? supabase.from('paid_items').select('item_id, month, is_paid').eq('user_id', currentUser.id)
+            : Promise.resolve({ data: null }),
+          needsLegacyCats
+            ? supabase.from('categories').select('name, color').eq('user_id', currentUser.id)
+            : Promise.resolve({ data: null }),
+          needsLegacyMethods
+            ? supabase.from('payment_methods').select('name').eq('user_id', currentUser.id)
+            : Promise.resolve({ data: null }),
+        ]);
 
         // Limpar pendências de exclusão locais que não chegaram na nuvem antes do reload
         let pendingDeletes = [];
@@ -297,6 +326,13 @@ const SupabaseSync = ({ currentUser, children }) => {
             contextRef.current.setTransactions(localTransactions);
           }
 
+          // Salva snapshot inicial das transações sincronizadas para enviar apenas diffs depois
+          const initialSnapshot = new Map();
+          localTransactions.forEach(tx => {
+            initialSnapshot.set(tx.id, JSON.stringify(mapToDB(tx)));
+          });
+          lastSyncedTxMapRef.current = initialSnapshot;
+
           if (contextRef.current?.setPaidItems) {
             contextRef.current.setPaidItems(finalPaidItems);
           }
@@ -333,6 +369,11 @@ const SupabaseSync = ({ currentUser, children }) => {
               if (allLocalTx.length > 0) {
                 const { error: txErr } = await supabase.from('transactions').upsert(allLocalTx.map(mapToDB));
                 if (txErr) throw new Error('Transações: ' + txErr.message);
+                const uploadedSnapshot = new Map();
+                allLocalTx.forEach(tx => {
+                  uploadedSnapshot.set(tx.id, JSON.stringify(mapToDB(tx)));
+                });
+                lastSyncedTxMapRef.current = uploadedSnapshot;
               }
 
               const baseMethods = currentCtx.paymentMethods || [];
@@ -389,36 +430,49 @@ const SupabaseSync = ({ currentUser, children }) => {
     fetchCloudData();
   }, [currentUser.id]);
 
-  // Função centralizada para envio reativo à nuvem
+  // Função centralizada para envio reativo e incremental à nuvem (envia apenas o que mudou)
   const syncToCloud = useCallback(async () => {
     const current = contextRef.current;
     if (!current) return;
     try {
-      const currentIds = (current.transactions || []).map(t => t.id);
+      if (txDirtyRef.current) {
+        const currentTxs = current.transactions || [];
+        const prevMap = lastSyncedTxMapRef.current;
+        const nextMap = new Map();
+        const changedRows = [];
 
-      if (current.transactions && current.transactions.length > 0) {
-        const toPush = current.transactions.slice(-500).map(mapToDB);
-        await supabase.from('transactions').upsert(toPush);
-      }
-
-      // Garantir que transações excluídas localmente também sejam removidas da nuvem
-      const { data: cloudTxIds } = await supabase
-        .from('transactions')
-        .select('id')
-        .eq('user_id', currentUser.id);
-
-      if (cloudTxIds && cloudTxIds.length > 0) {
-        const currentIdsSet = new Set(currentIds);
-        const idsToRemove = cloudTxIds
-          .map(row => row.id)
-          .filter(id => !currentIdsSet.has(id));
-
-        if (idsToRemove.length > 0) {
-          await supabase.from('transactions').delete().eq('user_id', currentUser.id).in('id', idsToRemove);
+        for (const tx of currentTxs) {
+          const dbRow = mapToDB(tx);
+          const serialized = JSON.stringify(dbRow);
+          nextMap.set(tx.id, serialized);
+          if (prevMap.get(tx.id) !== serialized) {
+            changedRows.push(dbRow);
+          }
         }
+
+        const removedIds = [];
+        for (const prevId of prevMap.keys()) {
+          if (!nextMap.has(prevId)) {
+            removedIds.push(prevId);
+          }
+        }
+
+        if (changedRows.length > 0) {
+          const chunkSize = 200;
+          for (let i = 0; i < changedRows.length; i += chunkSize) {
+            await supabase.from('transactions').upsert(changedRows.slice(i, i + chunkSize));
+          }
+        }
+
+        if (removedIds.length > 0) {
+          await supabase.from('transactions').delete().eq('user_id', currentUser.id).in('id', removedIds);
+        }
+
+        lastSyncedTxMapRef.current = nextMap;
+        txDirtyRef.current = false;
       }
 
-      if (current.settings || current.paidItems || current.categories || current.paymentMethods) {
+      if (settingsDirtyRef.current && (current.settings || current.paidItems || current.categories || current.paymentMethods)) {
         const settingsToPush = {
           ...(current.settings || {}),
           paidItems: current.paidItems || {},
@@ -426,6 +480,7 @@ const SupabaseSync = ({ currentUser, children }) => {
           paymentMethods: current.paymentMethods || []
         };
         await supabase.from('user_settings').upsert({ user_id: currentUser.id, settings: settingsToPush });
+        settingsDirtyRef.current = false;
       }
     } catch (err) {
       console.error('Erro sincronizando alterações com a nuvem:', err);
@@ -433,23 +488,49 @@ const SupabaseSync = ({ currentUser, children }) => {
   }, [currentUser.id]);
 
   const isDirtyRef = useRef(false);
-  const isInitialSyncDoneRef = useRef(false);
+  const isInitialTxDoneRef = useRef(false);
+  const isInitialSettingsDoneRef = useRef(false);
+  const syncTimerRef = useRef(null);
 
-  // Sync reativo com debounce ágil (400ms)
+  const scheduleSync = useCallback(() => {
+    isDirtyRef.current = true;
+    if (syncTimerRef.current) {
+      clearTimeout(syncTimerRef.current);
+    }
+    syncTimerRef.current = setTimeout(async () => {
+      syncTimerRef.current = null;
+      await syncToCloud();
+      isDirtyRef.current = txDirtyRef.current || settingsDirtyRef.current;
+    }, 800);
+  }, [syncToCloud]);
+
+  // Marca transações como alteradas somente quando `transactions` realmente mudar
   useEffect(() => {
     if (!isSynced) return;
-    if (!isInitialSyncDoneRef.current) {
-      isInitialSyncDoneRef.current = true;
+    if (!isInitialTxDoneRef.current) {
+      isInitialTxDoneRef.current = true;
       return;
     }
-    isDirtyRef.current = true;
-    const timer = setTimeout(async () => {
-      await syncToCloud();
-      isDirtyRef.current = false;
-    }, 400);
+    txDirtyRef.current = true;
+    scheduleSync();
+  }, [context.transactions, isSynced, scheduleSync]);
 
-    return () => clearTimeout(timer);
-  }, [context.transactions, context.settings, context.paidItems, context.categories, context.paymentMethods, isSynced, syncToCloud]);
+  // Marca configurações/pagos como alterados sem tocar na tabela `transactions`
+  useEffect(() => {
+    if (!isSynced) return;
+    if (!isInitialSettingsDoneRef.current) {
+      isInitialSettingsDoneRef.current = true;
+      return;
+    }
+    settingsDirtyRef.current = true;
+    scheduleSync();
+  }, [context.settings, context.paidItems, context.categories, context.paymentMethods, isSynced, scheduleSync]);
+
+  useEffect(() => {
+    return () => {
+      if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+    };
+  }, []);
 
   // Garantir sincronização se a janela/aba estiver sendo fechada apenas se houver alterações pendentes
   useEffect(() => {
